@@ -33,65 +33,89 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, ctx) = input
-    val desugaredSources = sources.map(desugar)
+    val desugaredSources = sources.map(desugar(_)(ctx))
     desugaredSources.foreach(_.assertAllTypesAreSet())
     (desugaredSources, ctx)
   }
 
-  private def desugar(src: Source): Source = Source(src.defs.map(desugar)).setName(src.getName)
+  private def desugar(src: Source)(implicit ctx: AnalysisContext): Source = Source(src.defs.map(desugar)).setName(src.getName)
 
-  private def desugar(block: Block): Block = Block(block.stats.map(desugar))
+  private def desugar(block: Block)(implicit ctx: AnalysisContext): Block = Block(block.stats.map(desugar))
 
-  private def desugar(funDef: FunDef): FunDef = {
-    FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType, desugar(funDef.body))
+  private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
+    // do not desugar preconditions and postconditions
+    val Block(bodyStats) = desugar(funDef.body)
+    val newBodyStats = funDef.precond.map(Assertion(_, isAssumed = true)) ++ bodyStats ++ funDef.postcond.map(Assertion(_))
+    FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType, Block(newBodyStats), funDef.precond, funDef.postcond)
   }
 
-  private def desugar(structDef: StructDef): StructDef = {
+  private def desugar(structDef: StructDef)(implicit ctx: AnalysisContext): StructDef = {
     StructDef(structDef.structName, structDef.fields.map(desugar))
   }
 
-  private def desugar(param: Param): Param = param
+  private def desugar(param: Param)(implicit ctx: AnalysisContext): Param = param
 
-  private def desugar(localDef: LocalDef): LocalDef =
+  private def desugar(localDef: LocalDef)(implicit ctx: AnalysisContext): LocalDef =
     LocalDef(localDef.localName, localDef.optType, desugar(localDef.rhs), localDef.isReassignable)
 
-  private def desugar(varAssig: VarAssig): VarAssig = VarAssig(desugar(varAssig.lhs), desugar(varAssig.rhs))
+  private def desugar(varAssig: VarAssig)(implicit ctx: AnalysisContext): VarAssig = VarAssig(desugar(varAssig.lhs), desugar(varAssig.rhs))
 
-  private def desugar(varModif: VarModif): VarAssig = {
+  private def desugar(varModif: VarModif)(implicit ctx: AnalysisContext): VarAssig = {
     val VarModif(lhs, rhs, op) = varModif
     val desugaredLhs = desugar(lhs)
     val desugaredRhs = desugar(rhs)
     VarAssig(desugaredLhs, BinaryOp(desugaredLhs, op, desugaredRhs).setType(lhs.getType))
   }
 
-  private def desugar(ifThenElse: IfThenElse): IfThenElse = {
+  private def desugar(ifThenElse: IfThenElse)(implicit ctx: AnalysisContext): IfThenElse = {
     IfThenElse(desugar(ifThenElse.cond), desugar(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(desugar))
   }
 
-  private def desugar(whileLoop: WhileLoop): WhileLoop = {
-    WhileLoop(desugar(whileLoop.cond), desugar(whileLoop.body))
+  private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): WhileLoop = {
+    WhileLoop(desugar(whileLoop.cond), desugar(whileLoop.body), whileLoop.invariants)
   }
 
-  private def desugar(forLoop: ForLoop): Block = {
+  private def desugar(forLoop: ForLoop)(implicit ctx: AnalysisContext): Block = {
     val body = Block(
       forLoop.body.stats ++ forLoop.stepStats
     )
-    val stats: List[Statement] = forLoop.initStats :+ WhileLoop(forLoop.cond, body)
+    val stats: List[Statement] = forLoop.initStats :+ WhileLoop(forLoop.cond, body, forLoop.invariants)
     desugar(Block(stats))
   }
 
-  private def desugar(returnStat: ReturnStat): ReturnStat = ReturnStat(returnStat.optVal.map(desugar))
+  private def desugar(returnStat: ReturnStat)(implicit ctx: AnalysisContext): ReturnStat =
+    ReturnStat(returnStat.optVal.map(desugar))
 
-  private def desugar(panicStat: PanicStat): PanicStat = PanicStat(desugar(panicStat.msg))
+  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat =
+    PanicStat(desugar(panicStat.msg))
 
-  private def desugar(expr: Expr): Expr = {
+  private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
     val desugared = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
-      case call: Call => Call(desugar(call.callee), call.args.map(desugar))
       case indexing: Indexing => Indexing(desugar(indexing.indexed), desugar(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
+
+      case Call(callee@VariableRef(name), args) =>
+        val funInfo = ctx.functions(name)
+        val desugaredCall = Call(desugar(callee), args.map(desugar))
+        if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty){
+          desugaredCall
+        } else if (funInfo.postcond.isEmpty) {
+          Sequence(funInfo.precond.map(Assertion(_)), desugaredCall)
+        } else {
+          val uid = uniqueIdGenerator.next()
+          // TODO rename params -> arg in pre and post conditions (probably do a method in FunDef)
+          // TODO remove invar or treat it
+          Sequence(
+            funInfo.precond.map(Assertion(_)) ++
+              List(LocalDef(uid, Some(funInfo.sig.retType), desugaredCall, isReassignable = false)) ++
+              funInfo.postcond.map(Assertion(_, isAssumed = true)),
+            VariableRef(uid).setType(funInfo.sig.retType)
+          )
+        }
+
       
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems) =>
@@ -176,7 +200,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     desugared.setTypeOpt(expr.getTypeOpt)
   }
 
-  private def desugar(statement: Statement): Statement = {
+  private def desugar(statement: Statement)(implicit ctx: AnalysisContext): Statement = {
     // call appropriate method for each type of statement
     statement match
       case expr: Expr => desugar(expr)
@@ -189,9 +213,10 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case forLoop: ForLoop => desugar(forLoop)
       case returnStat: ReturnStat => desugar(returnStat)
       case panicStat: PanicStat => desugar(panicStat)
+      case assertion: Assertion => assertion  // do not desugar assertions
   }
 
-  private def desugar(topLevelDef: TopLevelDef): TopLevelDef = {
+  private def desugar(topLevelDef: TopLevelDef)(implicit ctx: AnalysisContext): TopLevelDef = {
     topLevelDef match
       case funDef: FunDef => desugar(funDef)
       case structDef: StructDef => desugar(structDef)

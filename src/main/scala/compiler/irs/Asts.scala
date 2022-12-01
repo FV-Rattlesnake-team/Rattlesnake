@@ -4,6 +4,7 @@ import compiler.Position
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 import lang.{FunctionSignature, Keyword, Operator}
+import Keyword.*
 
 object Asts {
 
@@ -112,10 +113,17 @@ object Asts {
   /**
    * Function definition
    */
-  final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
+  final case class FunDef(
+                           funName: String,
+                           params: List[Param],
+                           optRetType: Option[Type],
+                           body: Block,
+                           precond: List[Expr],
+                           postcond: List[Expr]
+                         ) extends TopLevelDef {
     val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
 
-    override def children: List[Ast] = params :+ body
+    override def children: List[Ast] = params ++ List(body) ++ precond ++ postcond
   }
 
   /**
@@ -299,8 +307,8 @@ object Asts {
    *   }
    * }}}
    */
-  final case class WhileLoop(cond: Expr, body: Statement) extends Statement {
-    override def children: List[Ast] = List(cond, body)
+  final case class WhileLoop(cond: Expr, body: Statement, invariants: List[Expr]) extends Statement {
+    override def children: List[Ast] = List(cond, body) ++ invariants
   }
 
   /**
@@ -315,9 +323,10 @@ object Asts {
                             initStats: List[LocalDef | Assignment],
                             cond: Expr,
                             stepStats: List[Assignment],
-                            body: Block
+                            body: Block,
+                            invariants: List[Expr]
                           ) extends Statement {
-    override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
+    override def children: List[Ast] = initStats ++ List(cond) ++ stepStats ++ List(body) ++ invariants
   }
 
   /**
@@ -353,6 +362,12 @@ object Asts {
     override def children: List[Ast] = stats :+ expr
 
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
+  }
+
+  final case class Assertion(formulaExpr: Expr, isAssumed: Boolean = false) extends Statement {
+    override def children: List[Ast] = List(formulaExpr)
+
+    def keyword: Keyword = if isAssumed then Assume else Assert
   }
 
 }

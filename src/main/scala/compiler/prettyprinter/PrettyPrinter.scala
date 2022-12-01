@@ -3,7 +3,7 @@ package compiler.prettyprinter
 import compiler.CompilerStep
 import compiler.irs.Asts.*
 import lang.Keyword.*
-import lang.Operator
+import lang.{Keyword, Operator}
 
 final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boolean = false) extends CompilerStep[Ast, String] {
 
@@ -30,7 +30,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Sequence(stats, expr) =>
         addBracesList(stats :+ expr, ";", onMultipleLines = true)
 
-      case FunDef(funName, args, optRetType, body) =>
+      case FunDef(funName, args, optRetType, body, precond, postcond) =>
         pps
           .add(Fn.str)
           .addSpace()
@@ -42,7 +42,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
             .add(retType.toString)
             .addSpace()
         }
+        addAssertions(Require, precond)
+        if (precond.nonEmpty){
+          pps.newLine()
+        }
         addAst(body)
+        addAssertions(Ensure, postcond)
 
       case StructDef(structName, fields) =>
         pps
@@ -58,7 +63,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add(": ")
           .add(tpe.toString)
 
-      case localDef@LocalDef(valName, optType, rhs, isReassignable) =>
+      case localDef@LocalDef(valName, optType, rhs, _) =>
         pps
           .add(localDef.keyword.str)
           .addSpace()
@@ -209,15 +214,18 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(elseBr)
 
-      case WhileLoop(cond, body) =>
+      case WhileLoop(cond, body, invariants) =>
         pps
           .add(While.str)
           .addSpace()
         addCond(cond)
-        pps.addSpace()
+        addAssertions(Invar, invariants)
+        if (invariants.nonEmpty){
+          pps.newLine()
+        }
         addAst(body)
 
-      case ForLoop(initStats, cond, stepStats, body) =>
+      case ForLoop(initStats, cond, stepStats, body, invariants) =>
         pps
           .add(For.str)
           .addSpace()
@@ -238,6 +246,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
             pps.add(", ")
           }
         }
+        addAssertions(Invar, invariants)
         pps.addSpace()
         addAst(body)
 
@@ -261,6 +270,23 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(msg)
 
+      case assertion@Assertion(formulaExpr, _) =>
+        pps
+          .add(assertion.keyword.str)
+          .addSpace()
+        addAst(formulaExpr)
+
+    }
+  }
+
+  private def addAssertions(keyword: Keyword, invariants: List[Expr])(implicit pps: PrettyPrintString): Unit = {
+    for invariant <- invariants do {
+      pps
+        .newLine()
+        .add(keyword.str)
+        .addSpace()
+      addAst(invariant)
+      pps.addSpace()
     }
   }
 

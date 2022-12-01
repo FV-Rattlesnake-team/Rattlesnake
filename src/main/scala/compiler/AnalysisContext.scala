@@ -1,9 +1,10 @@
 package compiler
 
 import compiler.AnalysisContext
+import compiler.AnalysisContext.FunctionInfo
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
-import compiler.irs.Asts.{FunDef, StructDef}
+import compiler.irs.Asts.{Expr, FunDef, StructDef}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
@@ -11,7 +12,7 @@ import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature]){
+final case class AnalysisContext(functions: Map[String, FunctionInfo], structs: Map[String, StructSignature]){
 
   /**
    * Returns `true` iff `tpe` is known (primitive type, known struct or array of a known type)
@@ -30,8 +31,10 @@ final case class AnalysisContext(functions: Map[String, FunctionSignature], stru
 
 object AnalysisContext {
 
+  final case class FunctionInfo(sig: FunctionSignature, precond: List[Expr], postcond: List[Expr])
+
   final class Builder(errorReporter: ErrorReporter) {
-    private val functions: mutable.Map[String, FunctionSignature] = mutable.Map.empty
+    private val functions: mutable.Map[String, FunctionInfo] = mutable.Map.empty
     private val structs: mutable.Map[String, StructSignature] = mutable.Map.empty
 
     def addFunction(funDef: FunDef): Unit = {
@@ -41,7 +44,7 @@ object AnalysisContext {
       } else if (functions.contains(name)) {
         errorReporter.push(Err(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
       } else {
-        functions.put(name, funDef.signature)
+        functions.put(name, FunctionInfo(funDef.signature, funDef.precond, funDef.postcond))
       }
     }
 
@@ -66,7 +69,7 @@ object AnalysisContext {
     }
 
     def build(): AnalysisContext = {
-      functions.addAll(BuiltInFunctions.builtInFunctions)
+      functions.addAll(BuiltInFunctions.builtInFunctions.map((name, func) => name -> FunctionInfo(func, Nil, Nil)))
       new AnalysisContext(functions.toMap, structs.toMap)
     }
 

@@ -241,6 +241,12 @@ class CompilerTests {
     assertEquals(expectedRes, actualRes)
   }
 
+  @Test
+  def verificationConstructsTest(): Unit = {
+    val res = compileAndExecOneIter("verifconstr", "foo", 15, 88)
+    assertEquals(2, res)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

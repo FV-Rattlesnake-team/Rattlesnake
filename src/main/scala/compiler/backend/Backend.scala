@@ -115,7 +115,7 @@ final class Backend[V <: ClassVisitor](
     }
     mv.visitCode()
     generateCode(funDef.body, ctx)(mv, outputName)
-    if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
+    if (ctx.analysisContext.functions.apply(funDef.funName).sig.retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
     mv.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
@@ -168,7 +168,7 @@ final class Backend[V <: ClassVisitor](
           }
         } else {
           generateArgs()
-          val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
+          val descriptor = descriptorForFunc(analysisContext.functions.apply(name).sig)
           mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name, descriptor, false)
         }
       }
@@ -361,7 +361,7 @@ final class Backend[V <: ClassVisitor](
       case Ternary(cond, thenBr, elseBr) =>
         generateIfThenElse(ctx, cond, thenBr, Some(elseBr))
 
-      case WhileLoop(cond, body) =>
+      case WhileLoop(cond, body, _) =>
         /*
          * loopLabel:
          *   if !cond goto endLabel
