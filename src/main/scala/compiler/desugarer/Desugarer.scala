@@ -1,11 +1,12 @@
 package compiler.desugarer
 
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
+import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, Replacer}
 import lang.Operator.*
 import lang.Operators
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
+import lang.SoftKeywords.Result
 
 /**
  * Desugaring replaces:
@@ -22,7 +23,7 @@ import lang.Types.{ArrayType, UndefinedType}
  */
 final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
   private val uniqueIdGenerator = new UniqueIdGenerator()
-  
+
   /*
   * =========================================================================
   * IMPORTANT: recursive calls to desugar(...) must be performed everywhere,
@@ -43,10 +44,12 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   private def desugar(block: Block)(implicit ctx: AnalysisContext): Block = Block(block.stats.map(desugar))
 
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
-    // do not desugar preconditions and postconditions
+    // FIXME evaluate arguments only once
     val Block(bodyStats) = desugar(funDef.body)
-    val newBodyStats = funDef.precond.map(Assertion(_, isAssumed = true)) ++ bodyStats ++ funDef.postcond.map(Assertion(_))
-    FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType, Block(newBodyStats), funDef.precond, funDef.postcond)
+    val newBodyStats = funDef.precond.map(formula => Assertion(desugar(formula), isAssumed = true)) ++ bodyStats
+    val postcondWithRenaming = funDef.postcond.map(formula => Assertion(desugar(formula)))
+    FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
+      addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
   }
 
   private def desugar(structDef: StructDef)(implicit ctx: AnalysisContext): StructDef = {
@@ -71,8 +74,11 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     IfThenElse(desugar(ifThenElse.cond), desugar(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(desugar))
   }
 
-  private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): WhileLoop = {
-    WhileLoop(desugar(whileLoop.cond), desugar(whileLoop.body), whileLoop.invariants)
+  private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
+    val desugaredInvariants = whileLoop.invariants.map(invar => desugar(Assertion(invar)))
+    val newBodyStats = desugaredInvariants ++ whileLoop.body.asInstanceOf[Block].stats
+    val loop = WhileLoop(desugar(whileLoop.cond), desugar(Block(newBodyStats)), Nil)
+    if desugaredInvariants.isEmpty then loop else Block(loop :: desugaredInvariants)
   }
 
   private def desugar(forLoop: ForLoop)(implicit ctx: AnalysisContext): Block = {
@@ -89,6 +95,9 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat =
     PanicStat(desugar(panicStat.msg))
 
+  private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion =
+    Assertion(desugar(assertion.formulaExpr), assertion.isAssumed)
+
   private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
     val desugared = expr match {
       case literal: Literal => literal
@@ -99,24 +108,26 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
       case Call(callee@VariableRef(name), args) =>
         val funInfo = ctx.functions(name)
-        val desugaredCall = Call(desugar(callee), args.map(desugar))
-        if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty){
+        val desugaredCall = Call(desugar(callee), args.map(desugar)).setType(callee.getType)
+        if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty) {
           desugaredCall
         } else if (funInfo.postcond.isEmpty) {
           Sequence(funInfo.precond.map(Assertion(_)), desugaredCall)
         } else {
           val uid = uniqueIdGenerator.next()
-          // TODO rename params -> arg in pre and post conditions (probably do a method in FunDef)
-          // TODO remove invar or treat it
+          // can do optDef.get because only built-in functions can have None as a funDef, and built-ins do not have postconditions
+          // can call zip because the typechecker checked the number of arguments
+          val newLocalRef = VariableRef(uid).setType(funInfo.sig.retType)
+          val argsRenameMap = funInfo.optDef.get.params.map(_.paramName).zip(args).toMap + (Result.str -> newLocalRef)
           Sequence(
-            funInfo.precond.map(Assertion(_)) ++
+            funInfo.precond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap))) ++
               List(LocalDef(uid, Some(funInfo.sig.retType), desugaredCall, isReassignable = false)) ++
-              funInfo.postcond.map(Assertion(_, isAssumed = true)),
-            VariableRef(uid).setType(funInfo.sig.retType)
+              funInfo.postcond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), isAssumed = true)),
+            newLocalRef
           )
         }
 
-      
+
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems) =>
         val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
@@ -129,7 +140,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
         }
         Sequence(arrayValDefinition :: arrElemAssigStats, arrValRef)
-        
+
       case UnaryOp(operator, operand) =>
         val desugaredOperand = desugar(operand)
         operator match {
@@ -147,35 +158,35 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           List(desugaredLhs, desugaredRhs)
         ).setType(BoolType)
       }
-        
+
       case binaryOp: BinaryOp => {
         val desugaredLhs = desugar(binaryOp.lhs)
         val desugaredRhs = desugar(binaryOp.rhs)
         binaryOp.operator match {
-          
+
           // x <= y ---> x <= y || x == y
           case LessOrEq => desugar(BinaryOp(
             BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
             Or,
             BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
           ))
-          
+
           // x > y ---> y < x  (and similar with >=)
           case GreaterThan => desugar(BinaryOp(desugaredRhs, LessThan, desugaredLhs))
           case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs))
-          
+
           // x != y ---> !(x == y)
           case Inequality =>
             desugar(UnaryOp(ExclamationMark,
               BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
             ).setType(BoolType))
-            
+
           // x && y ---> when x then y else false
           case And => desugar(Ternary(desugaredLhs, desugaredRhs, BoolLit(false)))
-          
+
           // x || y ---> when x then true else y
           case Or => desugar(Ternary(desugaredLhs, BoolLit(true), desugaredRhs))
-          
+
           // nothing to desugar at top-level, only perform recursive calls
           case _ => BinaryOp(desugaredLhs, binaryOp.operator, desugaredRhs)
         }
@@ -184,8 +195,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
       // need to treat separately the case where one of the branches does not return (o.w. Java ASM crashes)
       case Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
-        val valName = uniqueIdGenerator.next()
-        if (thenBr.getType == NothingType){
+        if (thenBr.getType == NothingType) {
           val ifStat = IfThenElse(cond, thenBr, None)
           desugar(Sequence(List(ifStat), elseBr))
         } else {
@@ -213,13 +223,75 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case forLoop: ForLoop => desugar(forLoop)
       case returnStat: ReturnStat => desugar(returnStat)
       case panicStat: PanicStat => desugar(panicStat)
-      case assertion: Assertion => assertion  // do not desugar assertions
+      case assertion: Assertion => desugar(assertion)
   }
 
   private def desugar(topLevelDef: TopLevelDef)(implicit ctx: AnalysisContext): TopLevelDef = {
     topLevelDef match
       case funDef: FunDef => desugar(funDef)
       case structDef: StructDef => desugar(structDef)
+  }
+
+  private def addAssertsOnRetVals[S <: Statement](stat: S)(implicit rawAssertions: List[Assertion]): S = {
+    if (rawAssertions.isEmpty) {
+      stat
+    } else {
+      val resStat = stat match {
+        case Block(stats) => Block(stats.map(addAssertsOnRetVals))
+        case LocalDef(localName, optType, rhs, isReassignable) =>
+          LocalDef(localName, optType, addAssertsOnRetVals(rhs), isReassignable)
+        case VarAssig(lhs, rhs) => VarAssig(addAssertsOnRetVals(lhs), addAssertsOnRetVals(rhs))
+        case VarModif(lhs, rhs, op) => VarModif(addAssertsOnRetVals(lhs), addAssertsOnRetVals(rhs), op)
+        case IfThenElse(cond, thenBr, elseBrOpt) =>
+          IfThenElse(addAssertsOnRetVals(cond), addAssertsOnRetVals(thenBr), elseBrOpt.map(addAssertsOnRetVals))
+        case WhileLoop(cond, body, invariants) =>
+          WhileLoop(addAssertsOnRetVals(cond), addAssertsOnRetVals(body), invariants.map(addAssertsOnRetVals))
+        case ForLoop(initStats, cond, stepStats, body, invariants) =>
+          ForLoop(
+            initStats.map(addAssertsOnRetVals),
+            addAssertsOnRetVals(cond),
+            stepStats.map(addAssertsOnRetVals),
+            addAssertsOnRetVals(body),
+            invariants.map(addAssertsOnRetVals)
+          )
+        case PanicStat(msg) => PanicStat(addAssertsOnRetVals(msg))
+        case Assertion(formulaExpr, isAssumed) => Assertion(addAssertsOnRetVals(formulaExpr), isAssumed)
+        case literal: Literal => literal
+        case variableRef: VariableRef => variableRef
+        case Call(callee, args) => Call(addAssertsOnRetVals(callee), args.map(addAssertsOnRetVals))
+        case Indexing(indexed, arg) => Indexing(addAssertsOnRetVals(indexed), addAssertsOnRetVals(arg))
+        case ArrayInit(elemType, size) => ArrayInit(elemType, addAssertsOnRetVals(size))
+        case FilledArrayInit(arrayElems) => FilledArrayInit(arrayElems.map(addAssertsOnRetVals))
+        case StructInit(structName, args) => StructInit(structName, args.map(addAssertsOnRetVals))
+        case UnaryOp(operator, operand) => UnaryOp(operator, addAssertsOnRetVals(operand))
+        case BinaryOp(lhs, operator, rhs) =>
+          BinaryOp(addAssertsOnRetVals(lhs), operator, addAssertsOnRetVals(rhs))
+        case Select(lhs, selected) => Select(addAssertsOnRetVals(lhs), selected)
+        case Ternary(cond, thenBr, elseBr) =>
+          Ternary(addAssertsOnRetVals(cond), addAssertsOnRetVals(thenBr), addAssertsOnRetVals(elseBr))
+        case Cast(expr, tpe) => Cast(addAssertsOnRetVals(expr), tpe)
+        case Sequence(stats, expr) => Sequence(stats.map(addAssertsOnRetVals), addAssertsOnRetVals(expr))
+        case retNone@ReturnStat(None) => retNone
+
+        case ReturnStat(Some(retVal)) =>
+          val uid = uniqueIdGenerator.next()
+          val newLocalRef = VariableRef(uid).setType(retVal.getType)
+
+          val renamedAssertions = rawAssertions.map(assertion =>
+            Assertion(formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)), assertion.isAssumed)
+          )
+          Block(
+            LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions ++ List(ReturnStat(Some(newLocalRef)))
+          )
+      }
+      assert(resStat.isInstanceOf[Expr] == stat.isInstanceOf[Expr])
+      (stat, resStat) match {
+        case (expr: Expr, resExpr: Expr) =>
+          resExpr.setType(expr.getType)
+        case _ => ()
+      }
+      resStat.asInstanceOf[S]
+    }
   }
 
 }

@@ -12,3 +12,8 @@ require x > 0
     return a
 }
 ensure result > 24
+
+
+fn main() -> Void {
+    print(intToString(foo(10, 20)))
+}

@@ -222,6 +222,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAssertions(Invar, invariants)
         if (invariants.nonEmpty){
           pps.newLine()
+        } else {
+          pps.addSpace()
         }
         addAst(body)
 

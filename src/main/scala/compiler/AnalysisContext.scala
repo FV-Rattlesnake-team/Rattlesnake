@@ -31,7 +31,9 @@ final case class AnalysisContext(functions: Map[String, FunctionInfo], structs: 
 
 object AnalysisContext {
 
-  final case class FunctionInfo(sig: FunctionSignature, precond: List[Expr], postcond: List[Expr])
+  final case class FunctionInfo(sig: FunctionSignature, precond: List[Expr], postcond: List[Expr], optDef: Option[FunDef]){
+    def isBuiltin: Boolean = optDef.isEmpty
+  }
 
   final class Builder(errorReporter: ErrorReporter) {
     private val functions: mutable.Map[String, FunctionInfo] = mutable.Map.empty
@@ -44,7 +46,7 @@ object AnalysisContext {
       } else if (functions.contains(name)) {
         errorReporter.push(Err(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
       } else {
-        functions.put(name, FunctionInfo(funDef.signature, funDef.precond, funDef.postcond))
+        functions.put(name, FunctionInfo(funDef.signature, funDef.precond, funDef.postcond, Some(funDef)))
       }
     }
 
@@ -69,7 +71,7 @@ object AnalysisContext {
     }
 
     def build(): AnalysisContext = {
-      functions.addAll(BuiltInFunctions.builtInFunctions.map((name, func) => name -> FunctionInfo(func, Nil, Nil)))
+      functions.addAll(BuiltInFunctions.builtInFunctions.map((name, func) => name -> FunctionInfo(func, Nil, Nil, None)))
       new AnalysisContext(functions.toMap, structs.toMap)
     }
 

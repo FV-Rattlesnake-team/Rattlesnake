@@ -500,8 +500,11 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
   private def checkVerificationFormulas(formulas: List[(Expr, Option[Position])], ctx: TypeCheckingContext): Unit = {
     for (formulaExpr, pos) <- formulas do {
       val formulaType = check(formulaExpr, ctx)
-      if (formulaType != BoolType) {
+      if (!formulaType.subtypeOf(BoolType)) {
         reportError(s"formulas in assert and assume statements must have result type '${BoolType.str}', found '$formulaType'", pos)
+      }
+      if (!formulaExpr.isPurelyFunctional){
+        reportError("verification formulas should not contain side effects or function calls", pos)
       }
     }
   }
