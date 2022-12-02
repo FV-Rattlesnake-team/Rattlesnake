@@ -44,7 +44,6 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   private def desugar(block: Block)(implicit ctx: AnalysisContext): Block = Block(block.stats.map(desugar))
 
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
-    // FIXME evaluate arguments only once
     val Block(bodyStats) = desugar(funDef.body)
     val newBodyStats = funDef.precond.map(formula => Assertion(desugar(formula), isAssumed = true)) ++ bodyStats
     val postcondWithRenaming = funDef.postcond.map(formula => Assertion(desugar(formula)))
@@ -108,25 +107,36 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
       case Call(callee@VariableRef(name), args) =>
         val funInfo = ctx.functions(name)
-        val desugaredCall = Call(desugar(callee), args.map(desugar)).setType(callee.getType)
         if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty) {
-          desugaredCall
-        } else if (funInfo.postcond.isEmpty) {
-          Sequence(funInfo.precond.map(Assertion(_)), desugaredCall)
+          Call(desugar(callee), args.map(desugar)).setType(callee.getType)
         } else {
-          val uid = uniqueIdGenerator.next()
+          val argsUids = for _ <- funInfo.sig.argTypes yield uniqueIdGenerator.next()
+          val argsLocalDefsAndRefs = funInfo.sig.argTypes.indices.map { idx =>
+            val uid = argsUids(idx)
+            val tpe = funInfo.sig.argTypes(idx)
+            (
+              LocalDef(uid, Some(tpe), args(idx), isReassignable = false),
+              VariableRef(uid).setType(tpe)
+            )
+          }.toList
+          val argsLocalDefinitions = argsLocalDefsAndRefs.map(_._1)
+          val argsLocalReferences = argsLocalDefsAndRefs.map(_._2)
+          val resultUid = uniqueIdGenerator.next()
           // can do optDef.get because only built-in functions can have None as a funDef, and built-ins do not have postconditions
           // can call zip because the typechecker checked the number of arguments
-          val newLocalRef = VariableRef(uid).setType(funInfo.sig.retType)
-          val argsRenameMap = funInfo.optDef.get.params.map(_.paramName).zip(args).toMap + (Result.str -> newLocalRef)
+          val resultLocalRef = VariableRef(resultUid).setType(funInfo.sig.retType)
+          val argsRenameMap = funInfo.optDef.get.params.map(_.paramName).zip(argsLocalReferences).toMap + (Result.str -> resultLocalRef)
+          val newCall = Call(desugar(callee), argsLocalReferences).setType(funInfo.sig.retType)
           Sequence(
-            funInfo.precond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap))) ++
-              List(LocalDef(uid, Some(funInfo.sig.retType), desugaredCall, isReassignable = false)) ++
+            argsLocalDefinitions ++
+              funInfo.precond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap))) ++
+              List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
               funInfo.postcond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), isAssumed = true)),
-            newLocalRef
+            resultLocalRef
           )
         }
 
+      case Call(_, _) => assert(false)
 
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems) =>
