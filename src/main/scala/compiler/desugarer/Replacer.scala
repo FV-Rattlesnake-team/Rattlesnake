@@ -1,4 +1,4 @@
-package compiler
+package compiler.desugarer
 
 import compiler.irs.Asts.*
 
@@ -39,7 +39,8 @@ object Replacer {
       case ForLoop(initStats, cond, stepStats, body, invariants) =>
         ForLoop(initStats.map(renameInStat), replaceInExprImpl(cond), stepStats.map(renameInStat), renameInStat(body), invariants.map(replaceInExprImpl))
       case ReturnStat(optVal) => ReturnStat(optVal.map(replaceInExprImpl))
-      case Assertion(formulaExpr, isAssumed) => Assertion(replaceInExprImpl(formulaExpr), isAssumed)
+      case Assertion(formulaExpr, descr, isAssumed) =>
+        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).withPos(stat.getPosition)
       case _: PanicStat => stat
       case _: LocalDef => assert(false)
     }

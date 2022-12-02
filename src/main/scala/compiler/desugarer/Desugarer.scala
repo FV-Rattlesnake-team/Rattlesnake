@@ -1,7 +1,8 @@
 package compiler.desugarer
 
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, Replacer}
+import compiler.prettyprinter.PrettyPrinter
+import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
 import lang.Operator.*
 import lang.Operators
 import lang.Types.PrimitiveType.*
@@ -45,8 +46,12 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
     val Block(bodyStats) = desugar(funDef.body)
-    val newBodyStats = funDef.precond.map(formula => Assertion(desugar(formula), isAssumed = true)) ++ bodyStats
-    val postcondWithRenaming = funDef.postcond.map(formula => Assertion(desugar(formula)))
+    val newBodyStats = funDef.precond.map(formula =>
+      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true).withPos(funDef.getPosition))
+    ) ++ bodyStats
+    val postcondWithRenaming = funDef.postcond.map(formula =>
+      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).withPos(funDef.getPosition)
+    )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
       addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
   }
@@ -74,7 +79,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   }
 
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
-    val desugaredInvariants = whileLoop.invariants.map(invar => desugar(Assertion(invar)))
+    val desugaredInvariants = whileLoop.invariants.map(invar => desugar(Assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).withPos(whileLoop.getPosition)))
     val newBodyStats = desugaredInvariants ++ whileLoop.body.asInstanceOf[Block].stats
     val loop = WhileLoop(desugar(whileLoop.cond), desugar(Block(newBodyStats)), Nil)
     if desugaredInvariants.isEmpty then loop else Block(loop :: desugaredInvariants)
@@ -88,14 +93,17 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     desugar(Block(stats))
   }
 
-  private def desugar(returnStat: ReturnStat)(implicit ctx: AnalysisContext): ReturnStat =
+  private def desugar(returnStat: ReturnStat)(implicit ctx: AnalysisContext): ReturnStat = {
     ReturnStat(returnStat.optVal.map(desugar))
+  }
 
-  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat =
+  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat = {
     PanicStat(desugar(panicStat.msg))
+  }
 
-  private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion =
-    Assertion(desugar(assertion.formulaExpr), assertion.isAssumed)
+  private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion = {
+    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed).withPos(assertion.getPosition)
+  }
 
   private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
     val desugared = expr match {
@@ -105,7 +113,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
 
-      case Call(callee@VariableRef(name), args) =>
+      case call@Call(callee@VariableRef(name), args) =>
         val funInfo = ctx.functions(name)
         if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty) {
           Call(desugar(callee), args.map(desugar)).setType(callee.getType)
@@ -115,7 +123,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
             val uid = argsUids(idx)
             val tpe = funInfo.sig.argTypes(idx)
             (
-              LocalDef(uid, Some(tpe), args(idx), isReassignable = false),
+              LocalDef(uid, Some(tpe), desugar(args(idx)), isReassignable = false),
               VariableRef(uid).setType(tpe)
             )
           }.toList
@@ -129,9 +137,15 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           val newCall = Call(desugar(callee), argsLocalReferences).setType(funInfo.sig.retType)
           Sequence(
             argsLocalDefinitions ++
-              funInfo.precond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap))) ++
+              funInfo.precond.map(formula =>
+                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
+                  .withPos(call.getPosition))
+              ) ++
               List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
-              funInfo.postcond.map(formula => Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), isAssumed = true)),
+              funInfo.postcond.map(formula =>
+                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula), isAssumed = true)
+                  .withPos(call.getPosition))
+              ),
             resultLocalRef
           )
         }
@@ -265,7 +279,8 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
             invariants.map(addAssertsOnRetVals)
           )
         case PanicStat(msg) => PanicStat(addAssertsOnRetVals(msg))
-        case Assertion(formulaExpr, isAssumed) => Assertion(addAssertsOnRetVals(formulaExpr), isAssumed)
+        case Assertion(formulaExpr, descr, isAssumed) =>
+          Assertion(addAssertsOnRetVals(formulaExpr), descr, isAssumed).withPos(stat.getPosition)
         case literal: Literal => literal
         case variableRef: VariableRef => variableRef
         case Call(callee, args) => Call(addAssertsOnRetVals(callee), args.map(addAssertsOnRetVals))
@@ -283,12 +298,15 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
         case Sequence(stats, expr) => Sequence(stats.map(addAssertsOnRetVals), addAssertsOnRetVals(expr))
         case retNone@ReturnStat(None) => retNone
 
-        case ReturnStat(Some(retVal)) =>
+        case retStat@ReturnStat(Some(retVal)) =>
           val uid = uniqueIdGenerator.next()
           val newLocalRef = VariableRef(uid).setType(retVal.getType)
-
           val renamedAssertions = rawAssertions.map(assertion =>
-            Assertion(formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)), assertion.isAssumed)
+            Assertion(
+              formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
+              assertion.descr,
+              assertion.isAssumed
+            ).withPos(retStat.getPosition)
           )
           Block(
             LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions ++ List(ReturnStat(Some(newLocalRef)))

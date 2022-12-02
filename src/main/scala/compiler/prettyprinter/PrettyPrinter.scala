@@ -222,8 +222,6 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAssertions(Invar, invariants)
         if (invariants.nonEmpty){
           pps.newLine()
-        } else {
-          pps.addSpace()
         }
         addAst(body)
 
@@ -272,7 +270,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(msg)
 
-      case assertion@Assertion(formulaExpr, _) =>
+      case assertion@Assertion(formulaExpr, _, _) =>
         pps
           .add(assertion.keyword.str)
           .addSpace()
@@ -356,6 +354,14 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       }
     }
     pps.add(parenth._2)
+  }
+
+}
+
+object PrettyPrinter {
+
+  def prettyPrintExpr(expr: Expr, displayAllParentheses: Boolean = false): String = {
+    new PrettyPrinter(displayAllParentheses = displayAllParentheses).apply(expr)
   }
 
 }

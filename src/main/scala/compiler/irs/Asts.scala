@@ -406,8 +406,13 @@ object Asts {
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
   }
 
-  final case class Assertion(formulaExpr: Expr, isAssumed: Boolean = false) extends Statement {
+  final case class Assertion(formulaExpr: Expr, descr: String, isAssumed: Boolean = false) extends Statement {
     override def children: List[Ast] = List(formulaExpr)
+    
+    def withPos(posOpt: Option[Position]): Assertion = {
+      setPosition(posOpt)
+      this
+    }
 
     def keyword: Keyword = if isAssumed then Assume else Assert
   }

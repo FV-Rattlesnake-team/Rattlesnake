@@ -5,6 +5,7 @@ import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.{AnyTreeParser, FinalTreeParser, opt, recursive, repeat, repeatNonZero, repeatWithEnd, repeatWithSep, treeParser}
+import compiler.prettyprinter.PrettyPrinter
 import compiler.{CompilationStep, CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
@@ -269,11 +270,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "panicStat"
 
   private lazy val assertStat = {
-    kw(Assert).ignored ::: expr map (formula => Assertion(formula))
+    kw(Assert).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintExpr(formula)))
   } setName "assertStat"
 
   private lazy val assumeStat = {
-    kw(Assume).ignored ::: expr map (formula => Assertion(formula, isAssumed = true))
+    kw(Assume).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true))
   } setName "assumeStat"
 
 

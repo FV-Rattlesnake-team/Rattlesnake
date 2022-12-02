@@ -1,8 +1,9 @@
 package compiler
 
 import compiler.io.SourceFile
-import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertTrue}
-import org.junit.{After, Before, Test}
+import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertThat, assertTrue, fail}
+import org.junit.rules.ExpectedException
+import org.junit.{After, Before, Rule, Test}
 
 import java.io.*
 import java.net.URLClassLoader
@@ -11,6 +12,9 @@ import java.util.spi.ToolProvider
 import scala.reflect.ClassTag
 import scala.util.Using
 import org.objectweb.asm.Opcodes.V1_8
+
+import java.lang.reflect.InvocationTargetException
+import java.util.regex.Matcher
 
 class CompilerTests {
 
@@ -243,8 +247,70 @@ class CompilerTests {
 
   @Test
   def verificationConstructsTest(): Unit = {
-    val res = compileAndExecOneIter("verifconstr", "foo", 15, 88)
-    assertEquals(2, res)
+    val res = compileAndExecOneIter("verifconstr", "testF")
+    assertEquals(30, res)
+  }
+
+  @Test
+  def validAssertionsTest(): Unit = {
+    val res = compileAndExecOneIter("prepostcond", "testF", Array(15, 20, 45, -2, 26, 32, 11), 5)
+    assertEquals("no", res)
+  }
+
+  @Test
+  def violatedPreconditionTest(): Unit = {
+    assertThrowsInvocationTarget{
+      () => compileAndExecOneIter("prepostcond", "testF", Array(1, 2, 3, 4), 4)
+    }{ e =>
+      assertTrue(e.getMessage.contains("idx < #xs"))
+    }
+  }
+
+  @Test
+  def violatedPostconditionTest(): Unit = {
+    assertThrowsInvocationTarget {
+      () => compileAndExecOneIter("prepostcond", "testF", Array(2, 1, 5, 3, 7, 9, 0, 10, 25, 12, 19), 8)
+    }{ e =>
+      assertTrue(e.getMessage.contains("result == \"yes\" || result == \"no\""))
+    }
+  }
+
+  @Test
+  def violatedAssertionTest(): Unit = {
+    val counter = Array(0)
+    assertThrowsInvocationTarget {
+      () => compileAndExecOneIter("assertions", "testFunc", "rattlesnake", "bushmaster", counter)
+    }{ e =>
+      assertTrue(e.getMessage.contains("#x == #y"))
+    }
+    assertEquals(0, counter(0))
+  }
+
+  @Test
+  def violatedInvariantTest(): Unit = {
+    val counter = Array(0)
+    assertThrowsInvocationTarget {
+      () => compileAndExecOneIter("assertions", "testFunc", "cobra", "mamba", counter)
+    }{ e =>
+      assertTrue(e.getMessage.contains("j > i"))
+    }
+    assertEquals(4, counter(0))
+  }
+
+  /**
+   * <b>Use with care!</b> Always test that a failure actually fails the test
+   */
+  private def assertThrowsInvocationTarget(callable: () => Unit)(checksOnException: RuntimeException => Unit): Unit = {
+    try {
+      callable()
+      fail("no exception was thrown")
+    } catch {
+      case e: InvocationTargetException if e.getCause.isInstanceOf[RuntimeException] =>
+        checksOnException(e.getCause.asInstanceOf[RuntimeException])
+      case e =>
+        e.printStackTrace()
+        fail(s"unexpected exception: ${e.getClass}")
+    }
   }
 
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {

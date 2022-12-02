@@ -14,6 +14,6 @@ require x > 0
 ensure result > 24
 
 
-fn main() -> Void {
-    print(intToString(foo(10, 20)))
+fn testF() -> Int {
+    return foo(30, 20)
 }

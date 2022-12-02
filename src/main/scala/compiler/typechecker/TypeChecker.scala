@@ -330,7 +330,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         NothingType
 
-      case assertion@Assertion(formulaExpr, _) =>
+      case assertion@Assertion(formulaExpr, _, _) =>
         checkVerificationFormulas(List((formulaExpr, assertion.getPosition)), ctx)
         VoidType
 
