@@ -297,13 +297,25 @@ class CompilerTests {
     assertEquals(4, counter(0))
   }
 
+  @Test
+  def forLoopInvarTest(): Unit = {
+    val counter = Array(0)
+    val inputStr = "EPFL > ETH :-)"
+    assertThrowsInvocationTarget {
+      () => compileAndExecOneIter("forinvar", "bar", inputStr, 21, counter)
+    }{ e =>
+      assertTrue(e.getMessage.contains("i < #y"))
+    }
+    assertEquals(inputStr.length, counter(0))
+  }
+
   /**
    * <b>Use with care!</b> Always test that a failure actually fails the test
    */
   private def assertThrowsInvocationTarget(callable: () => Unit)(checksOnException: RuntimeException => Unit): Unit = {
     try {
       callable()
-      fail("no exception was thrown")
+      fail(s"no exception was thrown, but expected ${classOf[RuntimeException]}")
     } catch {
       case e: InvocationTargetException if e.getCause.isInstanceOf[RuntimeException] =>
         checksOnException(e.getCause.asInstanceOf[RuntimeException])
