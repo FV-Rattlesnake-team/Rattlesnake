@@ -156,6 +156,10 @@ object Main {
     getUnvalArg("all-parenth", argsMap)
   }
 
+  private def getDesugarOperatorsArg(argsMap: MutArgsMap): Boolean = {
+    getUnvalArg("desugar-ops", argsMap)
+  }
+
   private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
     val emptyArrStr = "[]"
     val arrayStr = getValuedArg("args", argsMap, Some(emptyArrStr))
@@ -276,6 +280,7 @@ object Main {
       val desugarer = TasksPipelines.desugarer(
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
+        getDesugarOperatorsArg(argsMap),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),
         getPrintAllParenthesesArg(argsMap)
@@ -336,6 +341,8 @@ object Main {
         |desugar: show the file after desugaring
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default same as input)
+        |       -desugar-ops: flag indicating that desugaring must be complete, i.e. that operators should be desugared
+        |                     (e.g.  `x && y`  is desugared to  `when x then y else false` )
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
