@@ -146,16 +146,57 @@ for var i = 0; i < #array; i += 1 {
 when <cond> then <expr1> else <expr2>
 ```
 
-#### Cast/type conversion
+### Cast/type conversion
 The following conversions can be performed:
 - `Int` <-> `Char`
 - `Int` <-> `Double`
 
 Syntax: `<expr> as <type>`, e.g. `10 as Double`
 
-#### Panic
+### Panic
 Terminates the program with an exception
 `panic <message>`, e.g. `panic "forbidden argument " + arg`
+
+### Verification
+
+#### Assertions
+
+```
+assert <predicate>
+```
+
+#### Preconditions and postconditions
+
+`require` and `ensure`:
+```
+fn foo(x: Int, y: Int) -> Int
+require x > 0
+require y >= 0
+{
+    return 2*x + y
+}
+ensure result > y
+```
+
+#### Loop invariant
+
+Checked at the beginning of each iteration as well as when the loop is exited
+
+For loop:
+```
+var sum = 0;
+for var i = 0; i < #xs; i += 1 invar sum >= 0 {
+    sum += xs[i]
+}
+```
+
+While loop:
+```
+while x < 20 && y < 100 invar x < y {
+    ...
+}
+```
+
 
 ## Built-in functions
 
