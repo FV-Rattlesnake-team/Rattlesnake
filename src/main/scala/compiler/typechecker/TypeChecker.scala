@@ -317,7 +317,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if (exprTpe.subtypeOf(tpe)) {
           reportError(s"useless conversion: '$exprTpe' --> '$tpe'", cast.getPosition, isWarning = true)
           tpe
-        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined){
+        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined) {
           tpe
         } else {
           reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)
@@ -373,14 +373,21 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     check(body, ctxWithParams)
   }
 
-  private def checkPreAndPostcond(ctx: TypeCheckingContext, funDef: FunDef, params: List[Param], precond: List[Expr], postcond: List[Expr], retType: Type): Unit = {
+  private def checkPreAndPostcond(
+                                   ctx: TypeCheckingContext,
+                                   funDef: FunDef,
+                                   params: List[Param],
+                                   precond: List[Expr],
+                                   postcond: List[Expr],
+                                   retType: Type
+                                 ): Unit = {
     val precondCtx = ctx.copyWithoutLocals
     for param <- params do {
       precondCtx.addLocal(param.paramName, param.tpe, isReassignable = false, () => assert(false), () => assert(false))
     }
     checkVerificationFormulas(precond.map((_, funDef.getPosition)), precondCtx)
     val retTypeAdmitsPostcond = retType != VoidType && retType != NothingType
-    if (retTypeAdmitsPostcond){
+    if (retTypeAdmitsPostcond) {
       val postcondCtx = ctx.copyWithoutLocals
       for param <- params do {
         postcondCtx.addLocal(param.paramName, param.tpe, isReassignable = false, () => assert(false), () => assert(false))
@@ -418,7 +425,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
   }
 
   /**
-   * @param returned types of all the expressions found after a `return`
+   * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
@@ -503,7 +510,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       if (!formulaType.subtypeOf(BoolType)) {
         reportError(s"formulas in assert and assume statements must have result type '${BoolType.str}', found '$formulaType'", pos)
       }
-      if (!formulaExpr.isPurelyFunctional){
+      if (!formulaExpr.isPurelyFunctional) {
         reportError("verification formulas should not contain side effects or function calls", pos)
       }
     }

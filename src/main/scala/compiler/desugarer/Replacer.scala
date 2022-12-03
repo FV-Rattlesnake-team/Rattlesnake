@@ -4,6 +4,9 @@ import compiler.irs.Asts.*
 
 object Replacer {
 
+  /**
+   * Replace variables in `expr` according to the `renameMap`
+   */
   def replaceInExpr[E <: Expr](expr: E, renameMap: Map[String, Expr]): E = {
     replaceInExprImpl(expr)(renameMap)
   }
@@ -40,7 +43,7 @@ object Replacer {
         ForLoop(initStats.map(renameInStat), replaceInExprImpl(cond), stepStats.map(renameInStat), renameInStat(body), invariants.map(replaceInExprImpl))
       case ReturnStat(optVal) => ReturnStat(optVal.map(replaceInExprImpl))
       case Assertion(formulaExpr, descr, isAssumed) =>
-        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).withPos(stat.getPosition)
+        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
       case _: PanicStat => stat
       case _: LocalDef => assert(false)
     }

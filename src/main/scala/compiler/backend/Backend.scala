@@ -308,7 +308,7 @@ final class Backend[V <: ClassVisitor](
             case Times => Opcodes.IMUL
             case Div => Opcodes.IDIV
             case Modulo => Opcodes.IREM
-            case _ => throw new IllegalStateException(s"unexpected $operator in backend")
+            case _ => throw new AssertionError(s"unexpected $operator in backend")
           }
           val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
           mv.visitInsn(opcode)
@@ -418,7 +418,7 @@ final class Backend[V <: ClassVisitor](
         generateExceptionCode(ctx, StringLit(descrWithPos))
         mv.visitLabel(okLabel)
 
-      case other => throw new IllegalStateException(s"unexpected in backend: ${other.getClass}")
+      case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
   }
 

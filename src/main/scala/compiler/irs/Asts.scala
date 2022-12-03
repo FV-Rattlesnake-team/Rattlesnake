@@ -408,8 +408,11 @@ object Asts {
 
   final case class Assertion(formulaExpr: Expr, descr: String, isAssumed: Boolean = false) extends Statement {
     override def children: List[Ast] = List(formulaExpr)
-    
-    def withPos(posOpt: Option[Position]): Assertion = {
+
+    /**
+     * Specialized version of `setPosition`: set the position and return this
+     */
+    def setPositionSp(posOpt: Option[Position]): Assertion = {
       setPosition(posOpt)
       this
     }

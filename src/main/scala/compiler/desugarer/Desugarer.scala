@@ -47,10 +47,10 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
     val Block(bodyStats) = desugar(funDef.body)
     val newBodyStats = funDef.precond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true).withPos(funDef.getPosition))
+      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true).setPositionSp(funDef.getPosition))
     ) ++ bodyStats
     val postcondWithRenaming = funDef.postcond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).withPos(funDef.getPosition)
+      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).setPositionSp(funDef.getPosition)
     )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
       addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
@@ -79,7 +79,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   }
 
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
-    val desugaredInvariants = whileLoop.invariants.map(invar => desugar(Assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).withPos(whileLoop.getPosition)))
+    val desugaredInvariants = whileLoop.invariants.map(invar => desugar(Assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).setPositionSp(whileLoop.getPosition)))
     val newBodyStats = desugaredInvariants ++ whileLoop.body.asInstanceOf[Block].stats
     val loop = WhileLoop(desugar(whileLoop.cond), desugar(Block(newBodyStats)), Nil)
     if desugaredInvariants.isEmpty then loop else Block(loop :: desugaredInvariants)
@@ -102,7 +102,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   }
 
   private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion = {
-    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed).withPos(assertion.getPosition)
+    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed).setPositionSp(assertion.getPosition)
   }
 
   private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
@@ -139,12 +139,12 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
                 desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
-                  .withPos(call.getPosition))
+                  .setPositionSp(call.getPosition))
               ) ++
               List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
               funInfo.postcond.map(formula =>
                 desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula), isAssumed = true)
-                  .withPos(call.getPosition))
+                  .setPositionSp(call.getPosition))
               ),
             resultLocalRef
           )
@@ -280,7 +280,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           )
         case PanicStat(msg) => PanicStat(addAssertsOnRetVals(msg))
         case Assertion(formulaExpr, descr, isAssumed) =>
-          Assertion(addAssertsOnRetVals(formulaExpr), descr, isAssumed).withPos(stat.getPosition)
+          Assertion(addAssertsOnRetVals(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
         case literal: Literal => literal
         case variableRef: VariableRef => variableRef
         case Call(callee, args) => Call(addAssertsOnRetVals(callee), args.map(addAssertsOnRetVals))
@@ -306,7 +306,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
               formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
               assertion.descr,
               assertion.isAssumed
-            ).withPos(retStat.getPosition)
+            ).setPositionSp(retStat.getPosition)
           )
           Block(
             LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions ++ List(ReturnStat(Some(newLocalRef)))
