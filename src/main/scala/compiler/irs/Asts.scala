@@ -44,8 +44,6 @@ object Asts {
 
   sealed abstract class Expr extends Statement {
     private var tpeOpt: Option[Type] = None
-    
-    def isPurelyFunctional: Boolean
 
     /**
      * Set the type that has been inferred for this expression
@@ -158,8 +156,6 @@ object Asts {
   sealed abstract class Literal extends Expr {
     val value: Any
 
-    final override def isPurelyFunctional: Boolean = true
-
     final override def children: List[Ast] = Nil
   }
 
@@ -202,8 +198,6 @@ object Asts {
    * Occurence of a variable (`val`, `var`, function parameter, etc.)
    */
   final case class VariableRef(name: String) extends Expr {
-
-    override def isPurelyFunctional: Boolean = true
     
     override def children: List[Ast] = Nil
   }
@@ -212,8 +206,6 @@ object Asts {
    * Function call: `callee(args)`
    */
   final case class Call(callee: Expr, args: List[Expr]) extends Expr {
-
-    override def isPurelyFunctional: Boolean = false  // TODO change if we add predicates
     
     override def children: List[Ast] = callee :: args
   }
@@ -222,8 +214,6 @@ object Asts {
    * Array indexing: `indexed[arg]`
    */
   final case class Indexing(indexed: Expr, arg: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = true
     
     override def children: List[Ast] = List(indexed, arg)
   }
@@ -232,8 +222,6 @@ object Asts {
    * Initialization of an (empty) array
    */
   final case class ArrayInit(elemType: Type, size: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = true
     
     override def children: List[Ast] = List(size)
   }
@@ -242,8 +230,6 @@ object Asts {
    * Initialization of an array that contains all the elements in `arrayElems` (in order)
    */
   final case class FilledArrayInit(arrayElems: List[Expr]) extends Expr {
-
-    override def isPurelyFunctional: Boolean = true
     
     override def children: List[Ast] = arrayElems
   }
@@ -252,8 +238,6 @@ object Asts {
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
   final case class StructInit(structName: String, args: List[Expr]) extends Expr {
-
-    override def isPurelyFunctional: Boolean = true
     
     override def children: List[Ast] = args
   }
@@ -262,8 +246,6 @@ object Asts {
    * Unary operator
    */
   final case class UnaryOp(operator: Operator, operand: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = operand.isPurelyFunctional
     
     override def children: List[Ast] = List(operand)
   }
@@ -272,8 +254,6 @@ object Asts {
    * Binary operator
    */
   final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = lhs.isPurelyFunctional && rhs.isPurelyFunctional
     
     override def children: List[Ast] = List(lhs, rhs)
   }
@@ -282,8 +262,6 @@ object Asts {
    * Access to a struct field: `lhs.select`
    */
   final case class Select(lhs: Expr, selected: String) extends Expr {
-
-    override def isPurelyFunctional: Boolean = lhs.isPurelyFunctional
     
     override def children: List[Ast] = List(lhs)
   }
@@ -327,10 +305,6 @@ object Asts {
    * }}}
    */
   final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = {
-      cond.isPurelyFunctional && thenBr.isPurelyFunctional && elseBr.isPurelyFunctional
-    }
     
     override def children: List[Ast] = List(cond, thenBr, elseBr)
   }
@@ -378,8 +352,6 @@ object Asts {
    * Cast, e.g. `x as Int`
    */
   final case class Cast(expr: Expr, tpe: Type) extends Expr {
-
-    override def isPurelyFunctional: Boolean = expr.isPurelyFunctional
     
     override def children: List[Ast] = List(expr)
   }
@@ -398,8 +370,6 @@ object Asts {
    * @param expr  the expression to be executed after [[stats]]. Its return value will be the return value of the whole Sequence
    */
   final case class Sequence(stats: List[Statement], expr: Expr) extends Expr {
-
-    override def isPurelyFunctional: Boolean = stats.isEmpty && expr.isPurelyFunctional
     
     override def children: List[Ast] = stats :+ expr
 

@@ -3,7 +3,7 @@ package compiler.typechecker
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, Position}
+import compiler.{AnalysisContext, CompilerStep, FunctionalChecker, Position}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.SoftKeywords.Result
 import lang.{Operators, TypeConversion}
@@ -510,8 +510,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       if (!formulaType.subtypeOf(BoolType)) {
         reportError(s"formulas in assert and assume statements must have result type '${BoolType.str}', found '$formulaType'", pos)
       }
-      if (!formulaExpr.isPurelyFunctional) {
-        reportError("verification formulas should not contain side effects or function calls", pos)
+      if (!FunctionalChecker.isPurelyFunctional(formulaExpr)(ctx.analysisContext)) {
+        reportError("verification formulas should only consist of purely functional expressions", pos)
       }
     }
   }
