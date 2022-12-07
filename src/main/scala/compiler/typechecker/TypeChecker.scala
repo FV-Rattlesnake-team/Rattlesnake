@@ -5,6 +5,7 @@ import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, Position}
 import lang.Operator.{Equality, Inequality, Sharp}
+import lang.SoftKeywords.Result
 import lang.{Operators, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
@@ -44,36 +45,19 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
-      case funDef@FunDef(funName, params, optRetType, body) =>
+      case funDef@FunDef(funName, params, optRetType, body, precond, postcond) =>
         optRetType.foreach { retType =>
-          if (!ctx.analysisContext.knowsType(retType)){
+          if (!ctx.analysisContext.knowsType(retType)) {
             reportError(s"return type is unknown: '$retType'", funDef.getPosition)
           }
         }
+        checkFunctionBody(ctx, funName, params, body)
         val expRetType = optRetType.getOrElse(VoidType)
-        val ctxWithParams = ctx.copyWithoutLocals
-        for param <- params do {
-          val typeIsKnown = ctx.analysisContext.knowsType(param.tpe)
-          if (!typeIsKnown) {
-            reportError(s"unknown type: ${param.tpe}", param.getPosition)
-          }
-          val paramType = if typeIsKnown then param.tpe else UndefinedType
-          ctxWithParams.addLocal(param.paramName, paramType, false, duplicateVarCallback = { () =>
-            reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
-          }, forbiddenTypeCallback = { () =>
-            reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
-          })
+        checkFuncReturnStats(funDef, funName, body, expRetType)
+        if (funDef.params.exists(_.paramName == Result.str)) {
+          errorReporter.push(Err(TypeChecking, s"function arguments cannot be named '$Result'", funDef.getPosition))
         }
-        check(body, ctxWithParams)
-        val endStatus = checkReturns(body)
-        if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)) {
-          reportError("missing return in non-Void function", funDef.getPosition)
-        }
-        val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType))
-        if (faultyTypes.nonEmpty) {
-          val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
-          reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
-        }
+        checkPreAndPostcond(ctx, funDef, params, precond, postcond, expRetType)
         VoidType
 
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
@@ -111,7 +95,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case call@Call(callee, args) =>
         callee match {
           case varRef@VariableRef(name) =>
-            ctx.functions.get(name) match {
+            ctx.functions.get(name).map(_.sig) match {
               case Some(funSig) =>
                 varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
@@ -303,15 +287,16 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
         }
 
-      case whileLoop@WhileLoop(cond, body) =>
+      case whileLoop@WhileLoop(cond, body, invariants) =>
         val condType = check(cond, ctx)
         if (!condType.subtypeOf(BoolType)) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", whileLoop.getPosition)
         }
         check(body, ctx)
+        checkVerificationFormulas(invariants.map((_, whileLoop.getPosition)), ctx)
         VoidType
 
-      case forLoop@ForLoop(initStats, cond, stepStats, body) =>
+      case forLoop@ForLoop(initStats, cond, stepStats, body, invariants) =>
         val newCtx = ctx.copied
         initStats.foreach(check(_, newCtx))
         val condType = check(cond, newCtx)
@@ -320,6 +305,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         stepStats.foreach(check(_, newCtx))
         check(body, newCtx)
+        checkVerificationFormulas(invariants.map((_, forLoop.getPosition)), ctx)
         VoidType
 
       case ReturnStat(valueOpt) =>
@@ -331,7 +317,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if (exprTpe.subtypeOf(tpe)) {
           reportError(s"useless conversion: '$exprTpe' --> '$tpe'", cast.getPosition, isWarning = true)
           tpe
-        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined){
+        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined) {
           tpe
         } else {
           reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)
@@ -344,6 +330,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         NothingType
 
+      case assertion@Assertion(formulaExpr, _, _) =>
+        checkVerificationFormulas(List((formulaExpr, assertion.getPosition)), ctx)
+        VoidType
+
       case _: (Param | Sequence) => assert(false)
     }
     // if expression save type
@@ -352,6 +342,61 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case _ => ()
     }
     tpe
+  }
+
+  private def checkFuncReturnStats(funDef: FunDef, funName: String, body: Block, expRetType: Type) = {
+    val endStatus = checkReturns(body)
+    if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)) {
+      reportError("missing return in non-Void function", funDef.getPosition)
+    }
+    val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType))
+    if (faultyTypes.nonEmpty) {
+      val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
+      reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
+    }
+  }
+
+  private def checkFunctionBody(ctx: TypeCheckingContext, funName: String, params: List[Param], body: Block) = {
+    val ctxWithParams = ctx.copyWithoutLocals
+    for param <- params do {
+      val typeIsKnown = ctx.analysisContext.knowsType(param.tpe)
+      if (!typeIsKnown) {
+        reportError(s"unknown type: ${param.tpe}", param.getPosition)
+      }
+      val paramType = if typeIsKnown then param.tpe else UndefinedType
+      ctxWithParams.addLocal(param.paramName, paramType, false, duplicateVarCallback = { () =>
+        reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
+      }, forbiddenTypeCallback = { () =>
+        reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
+      })
+    }
+    check(body, ctxWithParams)
+  }
+
+  private def checkPreAndPostcond(
+                                   ctx: TypeCheckingContext,
+                                   funDef: FunDef,
+                                   params: List[Param],
+                                   precond: List[Expr],
+                                   postcond: List[Expr],
+                                   retType: Type
+                                 ): Unit = {
+    val precondCtx = ctx.copyWithoutLocals
+    for param <- params do {
+      precondCtx.addLocal(param.paramName, param.tpe, isReassignable = false, () => assert(false), () => assert(false))
+    }
+    checkVerificationFormulas(precond.map((_, funDef.getPosition)), precondCtx)
+    val retTypeAdmitsPostcond = retType != VoidType && retType != NothingType
+    if (retTypeAdmitsPostcond) {
+      val postcondCtx = ctx.copyWithoutLocals
+      for param <- params do {
+        postcondCtx.addLocal(param.paramName, param.tpe, isReassignable = false, () => assert(false), () => assert(false))
+      }
+      postcondCtx.addLocal(Result.str, retType, isReassignable = false, () => assert(false), () => assert(false))
+      checkVerificationFormulas(postcond.map((_, funDef.getPosition)), postcondCtx)
+    } else if (postcond.nonEmpty) {
+      reportError(s"postcondition on function with '${retType}' return type", funDef.getPosition)
+    }
   }
 
   private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position]): Unit = {
@@ -380,7 +425,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
   }
 
   /**
-   * @param returned types of all the expressions found after a `return`
+   * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
@@ -427,14 +472,14 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case _: Ternary => EndStatus(Set.empty, false)
 
-      case whileLoop@WhileLoop(_, body) =>
+      case whileLoop@WhileLoop(_, body, _) =>
         val bodyEndStatus = checkReturns(body)
         if (bodyEndStatus.alwaysStopped) {
           reportError("while should be replaced by if", whileLoop.getPosition, isWarning = true)
         }
         EndStatus(bodyEndStatus.returned, false)
 
-      case forLoop@ForLoop(_, _, _, body) =>
+      case forLoop@ForLoop(_, _, _, body, _) =>
         val bodyEndStatus = checkReturns(body)
         if (bodyEndStatus.alwaysStopped) {
           reportError("for should be replaced by if", forLoop.getPosition, isWarning = true)
@@ -456,6 +501,18 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case _ => EndStatus(Set.empty, false)
 
+    }
+  }
+
+  private def checkVerificationFormulas(formulas: List[(Expr, Option[Position])], ctx: TypeCheckingContext): Unit = {
+    for (formulaExpr, pos) <- formulas do {
+      val formulaType = check(formulaExpr, ctx)
+      if (!formulaType.subtypeOf(BoolType)) {
+        reportError(s"formulas in assert and assume statements must have result type '${BoolType.str}', found '$formulaType'", pos)
+      }
+      if (!formulaExpr.isPurelyFunctional) {
+        reportError("verification formulas should not contain side effects or function calls", pos)
+      }
     }
   }
 

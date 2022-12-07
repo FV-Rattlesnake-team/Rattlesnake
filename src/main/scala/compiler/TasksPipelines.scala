@@ -36,9 +36,12 @@ object TasksPipelines {
   /**
    * Pipeline for formatting (src file -> formatted text file)
    */
-  def formatter(directoryPath: Path, filename: String,
-                indentGranularity: Int, overwriteFileCallback: String => Boolean,
-                displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+  def formatter(directoryPath: Path,
+                filename: String,
+                indentGranularity: Int,
+                overwriteFileCallback: String => Boolean,
+                displayAllParentheses: Boolean = false
+               ): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
@@ -59,15 +62,19 @@ object TasksPipelines {
   /**
    * Pipeline for desugaring (src file -> desugared src file)
    */
-  def desugarer(outputDirectoryPath: Path, filename: String,
-                indentGranularity: Int = 2, overwriteFileCallback: String => Boolean,
-                displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+  def desugarer(outputDirectoryPath: Path,
+                filename: String,
+                desugarOperators: Boolean,
+                indentGranularity: Int,
+                overwriteFileCallback: String => Boolean,
+                displayAllParentheses: Boolean
+               ): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(Mapper(List(_)))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer())
+      .andThen(new Desugarer(desugarOperators = desugarOperators))
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
@@ -81,7 +88,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer())
+      .andThen(new Desugarer(desugarOperators = true))
       .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject))
   }
 

@@ -5,6 +5,7 @@ import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.{AnyTreeParser, FinalTreeParser, opt, recursive, repeat, repeatNonZero, repeatWithEnd, repeatWithSep, treeParser}
+import compiler.prettyprinter.PrettyPrinter
 import compiler.{CompilationStep, CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
@@ -84,10 +85,19 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val topLevelDef: P[TopLevelDef] = funDef OR structDef
 
+  private lazy val precond = {
+    kw(Require).ignored ::: expr
+  } setName "precond"
+
+  private lazy val postcond = {
+    kw(Ensure).ignored ::: expr
+  } setName "postcond"
+
   private lazy val funDef = {
-    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
-      case funName ^: params ^: optRetType ^: body =>
-        FunDef(funName, params, optRetType, body)
+    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe)
+      ::: repeat(precond) ::: block ::: repeat(postcond) map {
+      case funName ^: params ^: optRetType ^: preconditions ^: body ^: postconditions =>
+        FunDef(funName, params, optRetType, body, preconditions, postconditions)
     }
   } setName "funDef"
 
@@ -207,7 +217,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "structInit"
 
   private lazy val stat: P[Statement] = {
-    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat
+    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat OR assertStat OR assumeStat
   } setName "stat"
 
   private lazy val valDef = {
@@ -222,15 +232,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "varDef"
 
+  private lazy val invariant = {
+    kw(Invar).ignored ::: expr
+  } setName "invar"
+
   private lazy val whileLoop = recursive {
-    kw(While).ignored ::: expr ::: block map {
-      case cond ^: body => WhileLoop(cond, body)
+    kw(While).ignored ::: expr ::: repeat(invariant) ::: block map {
+      case cond ^: invars ^: body => WhileLoop(cond, body, invars)
     }
   } setName "whileLoop"
 
   private lazy val forLoop = recursive {
-    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR assignmentStat, comma) ::: semicolon ::: expr ::: semicolon ::: repeatWithSep(assignmentStat, comma) ::: block map {
-      case initStats ^: cond ^: stepStats ^: body => ForLoop(initStats, cond, stepStats, body)
+    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR assignmentStat, comma) ::: semicolon
+      ::: expr ::: semicolon ::: repeatWithSep(assignmentStat, comma) ::: repeat(invariant) ::: block map {
+      case initStats ^: cond ^: stepStats ^: invars ^: body => ForLoop(initStats, cond, stepStats, body, invars)
     }
   } setName "forLoop"
 
@@ -253,6 +268,14 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val panicStat = {
     kw(Panic).ignored ::: expr map PanicStat.apply
   } setName "panicStat"
+
+  private lazy val assertStat = {
+    kw(Assert).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintExpr(formula)))
+  } setName "assertStat"
+
+  private lazy val assumeStat = {
+    kw(Assume).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true))
+  } setName "assumeStat"
 
 
   override def apply(input: (List[PositionedToken], String)): Source = {

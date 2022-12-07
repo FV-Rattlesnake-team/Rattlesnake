@@ -29,7 +29,7 @@ object FunctionsToInject {
         .andThen(Mapper(List(_)))
         .andThen(new ContextCreator(er, functionsToInject = Nil))
         .andThen(new TypeChecker(er))
-        .andThen(new Desugarer())
+        .andThen(new Desugarer(desugarOperators = true))
 
     // load code of the function, desugar it and replace its name
     val resFile = SourceFile("res/streq.rsn")

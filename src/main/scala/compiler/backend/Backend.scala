@@ -6,6 +6,7 @@ import compiler.backend.BuiltinFunctionsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
+import compiler.prettyprinter.PrettyPrinter
 import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
@@ -23,9 +24,10 @@ import scala.util.{Failure, Success, Try, Using}
 
 /**
  * Generates the output files: 1 core file, containing the program, and 1 file per struct
- * @param mode cf nested class [[Backend.Mode]]
+ *
+ * @param mode          cf nested class [[Backend.Mode]]
  * @param outputDirBase output directory path (will be extended with `/out`)
- * @param outputName name of the output file
+ * @param outputName    name of the output file
  * @tparam V depends on the mode
  */
 final class Backend[V <: ClassVisitor](
@@ -104,7 +106,7 @@ final class Backend[V <: ClassVisitor](
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
     constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
     constructorVisitor.visitInsn(Opcodes.RETURN)
-    constructorVisitor.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
+    constructorVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
     constructorVisitor.visitEnd()
   }
 
@@ -115,10 +117,10 @@ final class Backend[V <: ClassVisitor](
     }
     mv.visitCode()
     generateCode(funDef.body, ctx)(mv, outputName)
-    if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
+    if (ctx.analysisContext.functions.apply(funDef.funName).sig.retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
-    mv.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
+    mv.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
     mv.visitEnd()
   }
 
@@ -168,7 +170,7 @@ final class Backend[V <: ClassVisitor](
           }
         } else {
           generateArgs()
-          val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
+          val descriptor = descriptorForFunc(analysisContext.functions.apply(name).sig)
           mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name, descriptor, false)
         }
       }
@@ -306,7 +308,7 @@ final class Backend[V <: ClassVisitor](
             case Times => Opcodes.IMUL
             case Div => Opcodes.IDIV
             case Modulo => Opcodes.IREM
-            case _ => throw new IllegalStateException(s"unexpected $operator in backend")
+            case _ => throw new AssertionError(s"unexpected $operator in backend")
           }
           val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
           mv.visitInsn(opcode)
@@ -361,7 +363,7 @@ final class Backend[V <: ClassVisitor](
       case Ternary(cond, thenBr, elseBr) =>
         generateIfThenElse(ctx, cond, thenBr, Some(elseBr))
 
-      case WhileLoop(cond, body) =>
+      case WhileLoop(cond, body, _) =>
         /*
          * loopLabel:
          *   if !cond goto endLabel
@@ -388,7 +390,7 @@ final class Backend[V <: ClassVisitor](
 
       case Cast(expr, tpe) => {
         generateCode(expr, ctx)
-        if (!expr.getType.subtypeOf(tpe)){
+        if (!expr.getType.subtypeOf(tpe)) {
           // typechecker checked that it is defined, so .get without check
           TypeConversion.conversionFor(expr.getType, tpe).get match
             case TypeConversion.Int2Double => mv.visitInsn(Opcodes.I2D)
@@ -399,16 +401,38 @@ final class Backend[V <: ClassVisitor](
       }
 
       case PanicStat(msg) =>
-        // throw an exception
-        mv.visitTypeInsn(NEW, "java/lang/RuntimeException")
-        mv.visitInsn(DUP)
-        generateCode(msg, ctx)
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/RuntimeException",
-          "<init>", s"(L$stringTypeStr;)V", false)
-        mv.visitInsn(Opcodes.ATHROW)
+        generateExceptionCode(ctx, msg)
 
-      case other => throw new IllegalStateException(s"unexpected in backend: ${other.getClass}")
+      case assertion@Assertion(formulaExpr, descr, isAssumed) =>
+        /*
+         *  if formulaExpr != 0 goto OK_label
+         *    throw Exception
+         * OK_label:
+         */
+        val descriptiveWord = if isAssumed then "assumption" else "assertion"
+        val okLabel = new Label()
+        generateCode(formulaExpr, ctx)
+        mv.visitJumpInsn(Opcodes.IFNE, okLabel)
+        val descrWithPos = descriptiveWord ++ " violated" ++ assertion.getPosition.map(" at " ++ _.toString).getOrElse("") ++
+          ": " ++ descr
+        generateExceptionCode(ctx, StringLit(descrWithPos))
+        mv.visitLabel(okLabel)
+
+      case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
+  }
+
+  private def generateExceptionCode(
+                                     ctx: CodeGenerationContext,
+                                     msg: Expr
+                                   )(implicit mv: MethodVisitor, outputName: String): Unit = {
+    val runtimeException = "java/lang/RuntimeException"
+    mv.visitTypeInsn(NEW, runtimeException)
+    mv.visitInsn(DUP)
+    generateCode(msg, ctx)
+    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, runtimeException,
+      "<init>", s"(L$stringTypeStr;)V", false)
+    mv.visitInsn(Opcodes.ATHROW)
   }
 
   private def generateSequence(

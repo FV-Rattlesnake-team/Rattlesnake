@@ -16,6 +16,11 @@ enum Keyword(val str: String) {
   case New extends Keyword("new")
   case As extends Keyword("as")
   case Panic extends Keyword("panic")
+  case Assert extends Keyword("assert")
+  case Assume extends Keyword("assume")
+  case Require extends Keyword("require")
+  case Ensure extends Keyword("ensure")
+  case Invar extends Keyword("invar")
 
   override def toString: String = str
 }
