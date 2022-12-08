@@ -50,10 +50,10 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
     val Block(bodyStats) = desugar(funDef.body)
     val newBodyStats = funDef.precond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true).setPositionSp(funDef.getPosition))
+      desugar(assumption(formula, PrettyPrinter.prettyPrintExpr(formula)).setPositionSp(funDef.getPosition))
     ) ++ bodyStats
     val postcondWithRenaming = funDef.postcond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).setPositionSp(funDef.getPosition)
+      desugar(assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).setPositionSp(funDef.getPosition)
     )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
       addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
@@ -78,16 +78,35 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   }
 
   private def desugar(ifThenElse: IfThenElse)(implicit ctx: AnalysisContext): IfThenElse = {
-    IfThenElse(desugar(ifThenElse.cond), desugar(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(desugar))
+    val desugaredCond = desugar(ifThenElse.cond)
+    val desugaredInitThenBr = desugar(ifThenElse.thenBr)
+    val desugaredInitElseBrOpt = ifThenElse.elseBrOpt.map(desugar)
+    val newThenBr = blockify(
+      List(assumption(desugaredCond, "then assumption")),
+      desugaredInitThenBr,
+      Nil
+    )
+    val newElseBrOpt = desugaredInitElseBrOpt.map { elseBr =>
+      blockify(
+        List(assumption(desugaredNot(desugaredCond), "else assumption")),
+        elseBr,
+        Nil
+      )
+    }
+    IfThenElse(desugaredCond, newThenBr, newElseBrOpt)
   }
 
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
+    val desugaredCond = desugar(whileLoop.cond)
     val desugaredInvariants = whileLoop.invariants.map(invar =>
-      desugar(Assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).setPositionSp(whileLoop.getPosition))
+      desugar(assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).setPositionSp(whileLoop.getPosition))
     )
-    val newBodyStats = desugaredInvariants ++ whileLoop.body.asInstanceOf[Block].stats
-    val loop = WhileLoop(desugar(whileLoop.cond), desugar(Block(newBodyStats)), Nil)
-    if desugaredInvariants.isEmpty then loop else Block(loop :: desugaredInvariants)
+    val invarAssumed = desugaredInvariants.map(_.copy(isAssumed = true))
+    val whileBodyAssumptions = assumption(desugaredCond, "while body")
+    val newBody = blockify(whileBodyAssumptions :: invarAssumed, whileLoop.body, desugaredInvariants)
+    val loop = WhileLoop(desugaredCond, desugar(newBody), Nil)
+    val whileEndAssumption = assumption(desugaredNot(desugaredCond), "while end")
+    blockify(desugaredInvariants, loop, whileEndAssumption :: invarAssumed)
   }
 
   private def desugar(forLoop: ForLoop)(implicit ctx: AnalysisContext): Block = {
@@ -143,12 +162,12 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
           Sequence(
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
-                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
+                desugar(assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
                   .setPositionSp(call.getPosition))
               ) ++
               List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
               funInfo.postcond.map(formula =>
-                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula), isAssumed = true)
+                desugar(assumption(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
                   .setPositionSp(call.getPosition))
               ),
             resultLocalRef
@@ -324,8 +343,10 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
               assertion.isAssumed
             ).setPositionSp(retStat.getPosition)
           )
-          Block(
-            LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions ++ List(ReturnStat(Some(newLocalRef)))
+          blockify(
+            LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions,
+            ReturnStat(Some(newLocalRef)),
+            Nil
           )
       }
       assert(resStat.isInstanceOf[Expr] == stat.isInstanceOf[Expr])
@@ -350,6 +371,11 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
     }
   }
 
-  private def blockify(possiblyBlock: Statement): Block = blockify(Nil, possiblyBlock, Nil)
+  private def assumption(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
+    Assertion(desugar(formula), descr, isAssumed = true)
+  }
+  private def assertion(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
+    Assertion(desugar(formula), descr)
+  }
 
 }

@@ -403,7 +403,7 @@ final class Backend[V <: ClassVisitor](
       case PanicStat(msg) =>
         generateExceptionCode(ctx, msg)
 
-      case assertion@Assertion(formulaExpr, descr, isAssumed) =>
+      case assertion@Assertion(formulaExpr, descr, isAssumed) if !isAssumed =>
         /*
          *  if formulaExpr != 0 goto OK_label
          *    throw Exception
@@ -417,6 +417,8 @@ final class Backend[V <: ClassVisitor](
           ": " ++ descr
         generateExceptionCode(ctx, StringLit(descrWithPos))
         mv.visitLabel(okLabel)
+
+      case assertion: Assertion if assertion.isAssumed => ()  // do not check assumptions at runtime (only assertions)
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
