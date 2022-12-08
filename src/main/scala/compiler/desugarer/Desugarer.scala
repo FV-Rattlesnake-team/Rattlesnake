@@ -9,6 +9,9 @@ import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
 import lang.SoftKeywords.Result
 
+// TODO blockify where needed
+// TODO all control-flow cond should be mapped to assumptions
+
 /**
  * Desugaring replaces:
  *  - `>`, `>=` ---> reversed
@@ -334,5 +337,19 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
       resStat.asInstanceOf[S]
     }
   }
+
+  private def desugaredNot(expr: Expr)(implicit analysisContext: AnalysisContext): Expr = {
+    desugar(UnaryOp(ExclamationMark, expr).setType(BoolType))
+  }
+
+  private def blockify(before: List[Statement], possiblyBlock: Statement, after: List[Statement]): Block = {
+    possiblyBlock match {
+      case block: Block if before.isEmpty && after.isEmpty => block
+      case Block(stats) => Block(before ++ stats ++ after)
+      case middleStat => Block(before ++ List(middleStat) ++ after)
+    }
+  }
+
+  private def blockify(possiblyBlock: Statement): Block = blockify(Nil, possiblyBlock, Nil)
 
 }
