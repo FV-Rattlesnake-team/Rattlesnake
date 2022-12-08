@@ -20,7 +20,7 @@ object VerifTestMain {
         .andThen(Mapper(List(_)))
         .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
         .andThen(new TypeChecker(er))
-        .andThen(new Desugarer(desugarOperators = true))
+        .andThen(new Desugarer(desugarStringEq = false))
         .andThen(new FormulasWriter())
     }
     pipeline.apply(SourceFile(args(0)))

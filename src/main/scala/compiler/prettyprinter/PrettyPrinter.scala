@@ -360,8 +360,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
 object PrettyPrinter {
 
-  def prettyPrintExpr(expr: Expr, displayAllParentheses: Boolean = false): String = {
-    new PrettyPrinter(displayAllParentheses = displayAllParentheses).apply(expr)
+  def prettyPrintStat(statement: Statement, displayAllParentheses: Boolean = false): String = {
+    new PrettyPrinter(displayAllParentheses = displayAllParentheses).apply(statement)
   }
 
 }
