@@ -5,21 +5,23 @@ import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep}
 import lang.{Operator, Types}
 import lang.Operator.*
-import lang.Types.PrimitiveType.{DoubleType, IntType, StringType}
+import lang.Types.PrimitiveType.{BoolType, DoubleType, IntType, StringType}
 import smtlib.theories.Core
 import smtlib.theories.Core.{Equals, Implies, Not}
 import smtlib.theories.Ints.{Add as IAdd, Div as IDiv, LessThan as ILessThan, Mod as IMod, Mul as IMul, Sub as ISub}
 import smtlib.theories.Operations.OperationN1
 import smtlib.theories.Reals.{Add as RAdd, Div as RDiv, LessThan as RLessThan, Mul as RMul, Sub as RSub}
-import smtlib.trees.Commands.Assert
+import smtlib.trees.Commands.{Assert, Script}
 import smtlib.trees.Terms.*
 
 import java.io.FileWriter
 import scala.collection.mutable.ListBuffer
 
-final class FormulasWriter(outputFilePath: String) extends CompilerStep[(List[Source], AnalysisContext), Unit] {
+final class FormulasWriter() extends CompilerStep[(List[Source], AnalysisContext), Unit] {
 
-  private final case class Path(precond: List[Term], postcond: Term)
+  private final case class Path(precond: List[Term], postcond: Term, descr: String){
+    override def toString: String = s"$precond  |-  $postcond  [$descr]"
+  }
 
   private final case class Ctx(
                                 knownFormulas: ListBuffer[Term],
@@ -45,11 +47,24 @@ final class FormulasWriter(outputFilePath: String) extends CompilerStep[(List[So
   )
 
   override def apply(input: (List[Source], AnalysisContext)): Unit = {
-    val variablesRenamingCtx = LocalVarsCtx.newInstance()
-
-    val writer = new FileWriter(outputFilePath)
-
-    ???
+    val (sources, analysisContext) = input
+    val paths = ListBuffer.empty[Path]
+    val ctx = Ctx(ListBuffer.empty, paths, analysisContext, LocalVarsCtx.newInstance())
+//    val writer = new FileWriter(outputFilePath)
+    for {
+      src <- sources
+      defn <- src.defs
+    } do {
+      defn match {
+        case _: StructDef => ()   // ignore
+        case funDef: FunDef => addFormulasNoRet(funDef.body, ctx)
+      }
+    }
+    
+    // FIXME
+    for path <- paths do {
+      println(path)
+    }
   }
 
   extension (l: Term) {
@@ -85,12 +100,27 @@ final class FormulasWriter(outputFilePath: String) extends CompilerStep[(List[So
         // TODO structs
         ???
 
-      case IfThenElse(cond, thenBr, elseBrOpt) => ???
-      case WhileLoop(cond, body, _) => ???
-      case ReturnStat(optVal) => ???
-      case PanicStat(msg) => ???
-      case Assertion(formulaExpr, descr, isAssumed) => ???
+      case IfThenElse(_, thenBr, elseBrOpt) => {
+        addFormulasNoRet(thenBr, ctx)
+        elseBrOpt.foreach(addFormulasNoRet(_, ctx))
+      }
 
+      case WhileLoop(_, body, _) =>
+        addFormulasNoRet(body, ctx)
+
+      case Assertion(formulaExpr, descr, isAssumed) => {
+        val termFormula = addFormulasRetExpr(formulaExpr, ctx)
+        if (!isAssumed){
+          val path = Path(ctx.knownFormulas.toList, termFormula, descr)
+          ctx.paths.addOne(path)
+        }
+        ctx.knownFormulas.addOne(termFormula)
+      }
+
+      case PanicStat(_) =>
+        addFormulasNoRet(Assertion(BoolLit(false).setType(BoolType), "panic"), ctx)
+
+      case ReturnStat(_) => ()
       case _: (VarModif | ForLoop) => assert(false)
   }
 
