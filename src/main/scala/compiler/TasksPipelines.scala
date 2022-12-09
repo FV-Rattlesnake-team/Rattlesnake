@@ -9,6 +9,7 @@ import compiler.irs.Asts
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
+import compiler.renamer.Renamer
 import compiler.typechecker.TypeChecker
 import org.objectweb.asm.ClassVisitor
 
@@ -67,14 +68,19 @@ object TasksPipelines {
                 desugarOperators: Boolean,
                 indentGranularity: Int,
                 overwriteFileCallback: String => Boolean,
-                displayAllParentheses: Boolean
+                displayAllParentheses: Boolean,
+                renameVars: Boolean
                ): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
-    frontend(er)
-      .andThen(Mapper(List(_)))
-      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
-      .andThen(new TypeChecker(er))
-      .andThen(new Desugarer(desugarOperators = desugarOperators))
+    val noRenamePipeline = {
+      frontend(er)
+        .andThen(Mapper(List(_)))
+        .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+        .andThen(new TypeChecker(er))
+        .andThen(new Desugarer(desugarOperators = desugarOperators))
+    }
+    val transfPipeline = if renameVars then noRenamePipeline.andThen(new Renamer()) else noRenamePipeline
+    transfPipeline
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))

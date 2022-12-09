@@ -8,7 +8,7 @@ import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.typechecker.TypeChecker
-import compiler.verification.FormulasWriter
+import compiler.verification.PathsGenerator
 
 object VerifTestMain {
 
@@ -21,9 +21,13 @@ object VerifTestMain {
         .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
         .andThen(new TypeChecker(er))
         .andThen(new Desugarer(desugarStringEq = false))
-        .andThen(new FormulasWriter())
+        .andThen(new PathsGenerator())
     }
-    pipeline.apply(SourceFile(args(0)))
+    val paths = pipeline.apply(SourceFile(args(0)))
+    for path <- paths do {
+      println(path)
+      println
+    }
   }
 
 }

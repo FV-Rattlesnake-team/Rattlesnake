@@ -1,11 +1,13 @@
-package compiler.verification
+package compiler.renamer
 
-import compiler.verification.LocalVarsCtx.unnamedSymbol
+import compiler.renamer.{GlobalVarsCtx, LocalVarsCtx}
 import lang.Types.Type
 
 import scala.collection.mutable
 
-final class LocalVarsCtx private(private val globalVarsCtx: GlobalVarsCtx) {
+final class LocalVarsCtx(private val globalVarsCtx: GlobalVarsCtx) {
+  private val unnamedSymbol = "#"
+
   private val variables = mutable.Map.empty[String, String]
   
   def currNameFor(rawName: String): String = {
@@ -34,8 +36,11 @@ final class LocalVarsCtx private(private val globalVarsCtx: GlobalVarsCtx) {
 
 object LocalVarsCtx {
 
-  private val unnamedSymbol = "#"
+  def computeChanges(oldCtx: LocalVarsCtx, newCtx: LocalVarsCtx): Map[String, String] = {
+    oldCtx.variables.keySet.intersect(newCtx.variables.keySet).map { rawVarName =>
+      oldCtx.currNameFor(rawVarName) -> newCtx.currNameFor(rawVarName)
+    }.toMap
+  }
 
-  def newInstance(): LocalVarsCtx = new LocalVarsCtx(new GlobalVarsCtx())
-  
 }
+

@@ -160,6 +160,10 @@ object Main {
     getUnvalArg("desugar-ops", argsMap)
   }
 
+  private def getRenameVarsArg(argsMap: MutArgsMap): Boolean = {
+    getUnvalArg("rename-vars", argsMap)
+  }
+
   private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
     val emptyArrStr = "[]"
     val arrayStr = getValuedArg("args", argsMap, Some(emptyArrStr))
@@ -283,7 +287,8 @@ object Main {
         getDesugarOperatorsArg(argsMap),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),
-        getPrintAllParenthesesArg(argsMap)
+        getPrintAllParenthesesArg(argsMap),
+        getRenameVarsArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
       desugarer.apply(sources.head)
@@ -346,6 +351,8 @@ object Main {
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
+        |       -rename-vars: flag indicating that renaming should be performed, i.e. they should have identifiers that
+        |                     are unique across the program
         |help: displays help (this)
         |""".stripMargin)
   }

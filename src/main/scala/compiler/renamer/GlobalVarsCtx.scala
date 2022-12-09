@@ -1,4 +1,4 @@
-package compiler.verification
+package compiler.renamer
 
 import lang.Types.Type
 
@@ -16,7 +16,13 @@ final class GlobalVarsCtx {
 
   def addVarRetName(rawName: String, tpe: Type): String = {
     val idx = addVarRetIdx(rawName, tpe)
-    s"$rawName@$idx"
+    makeName(rawName, idx)
+  }
+
+  private def makeName(rawName: String, idx: Int): String = {
+    require(idx >= 0)
+    if (idx == 0) then rawName
+    else s"$rawName@$idx"
   }
 
 }

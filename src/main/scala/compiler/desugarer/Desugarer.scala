@@ -2,15 +2,12 @@ package compiler.desugarer
 
 import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
+import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, UniqueIdGenerator}
 import lang.Operator.*
 import lang.{Operator, Operators}
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
 import lang.SoftKeywords.Result
-
-// TODO blockify where needed
-// TODO all control-flow cond should be mapped to assumptions
 
 /**
  * Desugaring replaces:
@@ -28,7 +25,7 @@ import lang.SoftKeywords.Result
 final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean = true)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
-  private val uniqueIdGenerator = new UniqueIdGenerator()
+  private val uniqueIdGenerator = new UniqueIdGenerator("$")
 
   /*
   * =========================================================================
