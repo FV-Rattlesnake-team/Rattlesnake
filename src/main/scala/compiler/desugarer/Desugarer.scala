@@ -2,7 +2,7 @@ package compiler.desugarer
 
 import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, UniqueIdGenerator}
+import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, Replacer, UniqueIdGenerator}
 import lang.Operator.*
 import lang.{Operator, Operators}
 import lang.Types.PrimitiveType.*

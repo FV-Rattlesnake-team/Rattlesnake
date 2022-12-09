@@ -20,7 +20,7 @@ object VerifTestMain {
         .andThen(Mapper(List(_)))
         .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
         .andThen(new TypeChecker(er))
-        .andThen(new Desugarer(desugarStringEq = false))
+        .andThen(new Desugarer(desugarStringEq = false, desugarOperators = false))
         .andThen(new PathsGenerator())
     }
     val paths = pipeline.apply(SourceFile(args(0)))

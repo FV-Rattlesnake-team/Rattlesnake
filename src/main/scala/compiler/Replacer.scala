@@ -1,4 +1,4 @@
-package compiler.desugarer
+package compiler
 
 import compiler.irs.Asts.*
 
@@ -25,22 +25,22 @@ object Replacer {
       case Select(lhs, selected) => Select(replaceInExprImpl(lhs), selected)
       case Ternary(cond, thenBr, elseBr) => Ternary(replaceInExprImpl(cond), replaceInExprImpl(thenBr), replaceInExprImpl(elseBr))
       case Cast(expr, tpe) => Cast(replaceInExprImpl(expr), tpe)
-      case Sequence(stats, expr) => Sequence(stats.map(renameInStat), replaceInExprImpl(expr))
+      case Sequence(stats, expr) => Sequence(stats.map(replaceInStat), replaceInExprImpl(expr))
     }
     resExpr.setTypeOpt(expr.getTypeOpt)
     resExpr.asInstanceOf[E]
   }
 
-  private def renameInStat[S <: Statement](stat: S)(implicit replMap: Map[String, Expr]): S = {
+  private def replaceInStat[S <: Statement](stat: S)(implicit replMap: Map[String, Expr]): S = {
     val resStat = stat match {
       case expr: Expr => replaceInExprImpl(expr)
-      case Block(stats) => Block(stats.map(renameInStat))
+      case Block(stats) => Block(stats.map(replaceInStat))
       case VarAssig(lhs, rhs) => VarAssig(replaceInExprImpl(lhs), replaceInExprImpl(rhs))
       case VarModif(lhs, rhs, op) => VarModif(replaceInExprImpl(lhs), replaceInExprImpl(rhs), op)
-      case IfThenElse(cond, thenBr, elseBrOpt) => IfThenElse(replaceInExprImpl(cond), renameInStat(thenBr), elseBrOpt.map(renameInStat))
-      case WhileLoop(cond, body, invariants) => WhileLoop(replaceInExprImpl(cond), renameInStat(body), invariants.map(replaceInExprImpl))
+      case IfThenElse(cond, thenBr, elseBrOpt) => IfThenElse(replaceInExprImpl(cond), replaceInStat(thenBr), elseBrOpt.map(replaceInStat))
+      case WhileLoop(cond, body, invariants) => WhileLoop(replaceInExprImpl(cond), replaceInStat(body), invariants.map(replaceInExprImpl))
       case ForLoop(initStats, cond, stepStats, body, invariants) =>
-        ForLoop(initStats.map(renameInStat), replaceInExprImpl(cond), stepStats.map(renameInStat), renameInStat(body), invariants.map(replaceInExprImpl))
+        ForLoop(initStats.map(replaceInStat), replaceInExprImpl(cond), stepStats.map(replaceInStat), replaceInStat(body), invariants.map(replaceInExprImpl))
       case ReturnStat(optVal) => ReturnStat(optVal.map(replaceInExprImpl))
       case Assertion(formulaExpr, descr, isAssumed) =>
         Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)

@@ -17,8 +17,9 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
     } do {
       df match
         case _: StructDef => ()
-        case funDef: FunDef =>
-          generatePaths(funDef.body, List(new Path.Builder()))(paths)
+        case FunDef(_, _, _, body, _, _) =>
+          val pathBuilder = new Path.Builder()
+          generatePaths(body, List(pathBuilder))(paths)
     }
     paths.toList
   }
@@ -48,7 +49,7 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         List(new Path.Builder())
       case _: ReturnStat =>
         pathBuilders
-      case PanicStat(msg) =>
+      case _: PanicStat =>
         pathBuildersUpdated
       case Assertion(formulaExpr, descr, isAssumed) =>
         if (!isAssumed){
