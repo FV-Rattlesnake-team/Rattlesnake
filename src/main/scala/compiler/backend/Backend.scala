@@ -443,11 +443,6 @@ final class Backend[V <: ClassVisitor](
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
-      // if unused value put on the stack then drop it
-      stat match {
-        case expr: Expr if expr.getType != VoidType => mv.visitInsn(Opcodes.POP)
-        case _ => ()
-      }
     }
     optFinalExpr.foreach { finalExpr =>
       generateCode(finalExpr, newCtx)
