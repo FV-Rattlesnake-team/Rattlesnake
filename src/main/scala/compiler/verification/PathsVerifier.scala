@@ -18,7 +18,7 @@ import smtlib.trees.Commands.{CheckSatAssuming, Command, DeclareConst, PropLiter
 
 import scala.annotation.tailrec
 
-final class PathsVerifier(solver: Solver, errorReporter: ErrorReporter) extends CompilerStep[List[Path], Boolean] {
+final class PathsVerifier(solver: Solver, timeoutSecOpt: Option[Int], errorReporter: ErrorReporter) extends CompilerStep[List[Path], Boolean] {
 
   override def apply(paths: List[Path]): Boolean = {
     var correct = true
@@ -72,7 +72,11 @@ final class PathsVerifier(solver: Solver, errorReporter: ErrorReporter) extends 
       val implication = Implies(assumedFormulas.foldLeft(True())(Core.And(_, _)), convertedFormulaToProve)
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
       val comments = s"target: $descr" :: "" :: path.toStrLines
-      solver.check(script, comments, idx)
+      timeoutSecOpt match
+        case Some(timeout) =>
+          solver.check(script, timeout, comments, idx)
+        case None =>
+          solver.check(script, comments, idx)
     }
   }
 

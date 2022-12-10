@@ -153,6 +153,12 @@ object Main {
     indent
   }
 
+  private def getTimeoutArg(argsMap: MutArgsMap): Option[Int] = {
+    val argStr = getValuedArg("timeout", argsMap, Some("-1"))
+    val timeout = argStr.toIntOption.getOrElse(error(s"could not convert $argStr to an integer"))
+    if timeout > 0 then Some(timeout) else None
+  }
+
   private def getPrintAllParenthesesArg(argsMap: MutArgsMap): Boolean = {
     getUnvalArg("all-parenth", argsMap)
   }
@@ -296,11 +302,12 @@ object Main {
       succeed()
     }
   }
-  
+
   private case class Verify(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val verifier = TasksPipelines.verifier(
-        getOutDirArg(argsMap)
+        getOutDirArg(argsMap),
+        getTimeoutArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
       val correct = verifier.apply(sources)
@@ -370,7 +377,7 @@ object Main {
         |       -rename-vars: flag indicating that renaming should be performed, i.e. they should have identifiers that
         |                     are unique across the program
         |verify: run formal verification on the input files
-        | args: -out-dir=...: required, directory where to write the formula files (directory is created or cleared if 
+        | args: -out-dir=...: required, directory where to write the formula files (directory is created or cleared if
         |                     it already exists)
         |help: displays help (this)
         |""".stripMargin)
