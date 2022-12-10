@@ -11,6 +11,7 @@ import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.renamer.Renamer
 import compiler.typechecker.TypeChecker
+import compiler.verification.{PathsGenerator, PathsVerifier, Z3Solver}
 import org.objectweb.asm.ClassVisitor
 
 import java.nio.file.Path
@@ -84,6 +85,18 @@ object TasksPipelines {
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
+  }
+  
+  val verifier = {
+    val er = createErrorReporter
+    frontend(er)
+      .andThen(Mapper(List(_)))
+      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+      .andThen(new TypeChecker(er))
+      .andThen(new Desugarer(desugarStringEq = false, desugarOperators = false, desugarPanic = true))
+      .andThen(new Renamer())
+      .andThen(new PathsGenerator())
+      .andThen(new PathsVerifier(Z3Solver, er))
   }
 
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,

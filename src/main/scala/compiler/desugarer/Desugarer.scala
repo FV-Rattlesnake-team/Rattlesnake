@@ -22,7 +22,7 @@ import lang.SoftKeywords.Result
  *  - `x || y` ---> `when x then true else y`
  *  - `[x_1, ... , x_n]` ---> `val $0 = arr Int[n]; $0[0] = x_1; ... ; $0[n-1] = x_n; $0`
  */
-final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean = true)
+final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean = true, desugarPanic: Boolean = false)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
   private val uniqueIdGenerator = new UniqueIdGenerator("$")
@@ -120,8 +120,9 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     ReturnStat(returnStat.optVal.map(desugar))
   }
 
-  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat = {
-    PanicStat(desugar(panicStat.msg))
+  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): Statement = {
+    if desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat))
+    else PanicStat(desugar(panicStat.msg))
   }
 
   private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion = {

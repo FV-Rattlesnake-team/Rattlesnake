@@ -11,6 +11,14 @@ import scala.collection.mutable.ListBuffer
 final case class Path(stats: List[Statement], formulaToProve: Expr, descr: String){
   stats.foreach(stat => require(!isControlFlowStat(stat), PrettyPrinter.prettyPrintStat(stat)))
   require(formulaToProve.getType == BoolType)
+  
+  def assertAllTypesAreSet(): Unit = {
+    for stat <- stats do {
+      stat match
+        case expr: Expr => expr.assertAllTypesAreSet()
+        case _ => ()
+    }
+  }
 
   override def toString: String = {
     val prettyPrinter = new PrettyPrinter()
@@ -49,7 +57,7 @@ object Path {
     }
 
     private def removeVars(expr: Expr): Expr = {
-      expr match
+      val res = expr match {
         case literal: Asts.Literal =>
           literal
         case VariableRef(name) =>
@@ -76,6 +84,8 @@ object Path {
           Cast(removeVars(expr), tpe)
         case Sequence(stats, expr) =>
           Sequence(stats.map(removeVars), removeVars(expr))
+      }
+      res.setType(expr.getType)
     }
 
     private def removeVars(statement: Statement): Statement = {

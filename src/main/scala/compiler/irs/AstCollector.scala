@@ -4,7 +4,7 @@ import compiler.irs.Asts.*
 
 object AstCollector {
 
-  private def collect[T](ast: Ast)(implicit pf: PartialFunction[Ast, List[T]]): List[T] = {
+  def collect[T](ast: Ast)(implicit pf: PartialFunction[Ast, List[T]]): List[T] = {
     val head = pf.applyOrElse(ast, _ => Nil)
     val tail = ast match {
       case _: Literal => Nil

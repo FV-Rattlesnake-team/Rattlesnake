@@ -21,7 +21,9 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
           val pathBuilder = new Path.Builder()
           generatePaths(body, List(pathBuilder))(paths)
     }
-    paths.toList
+    val res = paths.toList
+    res.foreach(_.assertAllTypesAreSet())
+    res
   }
 
   private def generatePaths(

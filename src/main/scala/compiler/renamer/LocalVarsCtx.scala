@@ -6,7 +6,6 @@ import lang.Types.Type
 import scala.collection.mutable
 
 final class LocalVarsCtx(private val globalVarsCtx: GlobalVarsCtx) {
-  private val unnamedSymbol = "#"
 
   private val variables = mutable.Map.empty[String, String]
   
@@ -21,10 +20,6 @@ final class LocalVarsCtx(private val globalVarsCtx: GlobalVarsCtx) {
     variables(rawName) = name
     name
   }
-
-  def currNameForUnnamed: String = currNameFor(unnamedSymbol)
-
-  def addAndRetUnnamedSymbol(tpe: Type): String = addAndRetNameFor(unnamedSymbol, tpe)
   
   def copied: LocalVarsCtx = {
     val newLvc = new LocalVarsCtx(globalVarsCtx)

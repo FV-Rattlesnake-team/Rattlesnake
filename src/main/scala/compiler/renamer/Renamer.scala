@@ -37,7 +37,7 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
     def ren(expr: Expr): Expr = rename(expr, ctx)
 
-    expr match
+    val res: Expr = expr match {
       case literal: Literal => literal
       case Call(funcRef: VariableRef, args) =>
         Call(funcRef, args.map(ren))
@@ -67,6 +67,8 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
         val newName = ctx.currNameFor(name)
         VariableRef(newName)
       }
+    }
+    res.setType(expr.getType)
   }
 
   private def rename(block: Block, ctx: LocalVarsCtx): Block = {
