@@ -87,6 +87,7 @@ object Main {
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
           case "desugar" => (Desugar(argsMap), files)
+          case "verify" => (Verify(argsMap), files)
           case _ => error(s"unknown command: $cmd")
         }
       }
@@ -295,6 +296,21 @@ object Main {
       succeed()
     }
   }
+  
+  private case class Verify(argsMap: MutArgsMap) extends Action {
+    override def run(sources: List[SourceCodeProvider]): Unit = {
+      val verifier = TasksPipelines.verifier(
+        getOutDirArg(argsMap)
+      )
+      reportUnknownArgsIfAny(argsMap)
+      val correct = verifier.apply(sources)
+      if (correct) {
+        println("Program verification succeeded")
+      } else {
+        println("Program verification failed")
+      }
+    }
+  }
 
   private def error(msg: String): Nothing = {
     System.err.println(msg)
@@ -353,6 +369,9 @@ object Main {
         |                     regardless of the priority of operations (takes no value)
         |       -rename-vars: flag indicating that renaming should be performed, i.e. they should have identifiers that
         |                     are unique across the program
+        |verify: run formal verification on the input files
+        | args: -out-dir=...: required, directory where to write the formula files (directory is created or cleared if 
+        |                     it already exists)
         |help: displays help (this)
         |""".stripMargin)
   }

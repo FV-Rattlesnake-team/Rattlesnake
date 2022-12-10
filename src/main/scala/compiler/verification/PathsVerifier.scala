@@ -16,16 +16,19 @@ import smtlib.theories.Ints.IntSort
 import smtlib.trees.Terms.*
 import smtlib.trees.Commands.{CheckSatAssuming, Command, DeclareConst, PropLiteral, Script, Assert as AssertCmd}
 
+import scala.annotation.tailrec
+
 final class PathsVerifier(solver: Solver, errorReporter: ErrorReporter) extends CompilerStep[List[Path], Boolean] {
 
   override def apply(paths: List[Path]): Boolean = {
     var correct = true
-    for (path <- paths) do {
+    for ((path, idx) <- paths.zipWithIndex) do {
+      val base1Idx = idx + 1
 
-      def genPrintableReport(msg: String): String = s"${path.descr} ====> $msg"
+      def genPrintableReport(msg: String): String = s"$base1Idx: ${path.descr} ====> $msg"
 
       println(
-        verify(path, errorReporter) match
+        verify(path, base1Idx, errorReporter) match
           case Solver.Sat => {
             correct = false
             genPrintableReport("FAILURE")
@@ -42,11 +45,6 @@ final class PathsVerifier(solver: Solver, errorReporter: ErrorReporter) extends 
           }
       )
     }
-    if (correct){
-      println("Program verification succeeded")
-    } else {
-      println("Program verification failed")
-    }
     errorReporter.displayAndTerminateIfErrors()
     correct
   }
@@ -58,28 +56,36 @@ final class PathsVerifier(solver: Solver, errorReporter: ErrorReporter) extends 
       flag = true
     }
 
-    def isSet(): Boolean = flag
+    def isSet: Boolean = flag
   }
 
-  private def verify(path: Path, errorReporter: ErrorReporter): Solver.Result = {
+  private def verify(path: Path, idx: Int, errorReporter: ErrorReporter): Solver.Result = {
     val Path(stats, formulaToProve, descr) = path
     val errorFlag = new ErrorFlag()
     val assumedFormulas = stats.flatMap(generateFormulas(_)(errorReporter, errorFlag))
     val convertedFormulaToProve = transformExpr(formulaToProve)(errorReporter, errorFlag)
-    if (errorFlag.isSet()) {
+    if (errorFlag.isSet) {
       Solver.Error("solver error")
     } else {
       val vars = (formulaToProve :: stats).flatMap(allVariables).toMap.toList   // eliminate duplicates
       val varsDecls = vars.map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
       val implication = Implies(assumedFormulas.foldLeft(True())(Core.And(_, _)), convertedFormulaToProve)
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
-      solver.check(script)
+      val comments = s"target: $descr" :: "" :: path.toStrLines
+      solver.check(script, comments, idx)
     }
   }
 
+  // this function also considers the function names, which should not be a problem since these constants are just ignored
   private def allVariables(ast: Ast): List[(String, Type)] = {
     AstCollector.collect(ast) {
-      case varRef@VariableRef(name) => List((name, varRef.getType))
+      case varRef@VariableRef(name) => {
+        List((name, varRef.getType))
+      }
+      case LocalDef(localName, optType, rhs, _) => {
+        val tpe = optType.getOrElse(rhs.getType)
+        List((localName, tpe))
+      }
     }
   }
 

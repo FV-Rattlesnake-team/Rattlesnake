@@ -5,8 +5,8 @@ import smtlib.trees.Terms.Term
 
 trait Solver {
 
-  def check(smtScript: Script): Solver.Result
-  def check(smtScript: Script, timeoutSec: Int): Solver.Result
+  def check(smtScript: Script, comments: List[String], idx: Int): Solver.Result
+  def check(smtScript: Script, timeoutSec: Int, comments: List[String], idx: Int): Solver.Result
 
 }
 

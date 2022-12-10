@@ -45,7 +45,8 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
       case _: Assignment =>
         pathBuildersUpdated
       case IfThenElse(_, thenBr, elseBrOpt) =>
-        generatePaths(thenBr, pathBuilders) ++ elseBrOpt.map(generatePaths(_, pathBuilders)).getOrElse(Nil)
+        val elsePathBuilders = pathBuilders.map(_.copied)
+        generatePaths(thenBr, pathBuilders) ++ elseBrOpt.map(generatePaths(_, elsePathBuilders)).getOrElse(Nil)
       case WhileLoop(_, body, _) =>
         generatePaths(body, List(new Path.Builder()))
         List(new Path.Builder())

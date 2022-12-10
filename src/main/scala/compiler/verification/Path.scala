@@ -19,12 +19,17 @@ final case class Path(stats: List[Statement], formulaToProve: Expr, descr: Strin
         case _ => ()
     }
   }
-
-  override def toString: String = {
+  
+  def toStrLines: List[String] = {
     val prettyPrinter = new PrettyPrinter()
     val statsLines = stats.map(prettyPrinter.apply(_))
     val line = "-".repeat(statsLines.maxBy(_.length).length)
-    statsLines.mkString("\n") ++ "\n" ++ line ++ "\n ==> " ++ prettyPrinter.apply(formulaToProve) ++ s"  [$descr]"
+    val formulaToProveLine = " ==> " ++ prettyPrinter.apply(formulaToProve) ++ s"  [$descr]"
+    statsLines ++ List(line, formulaToProveLine)
+  }
+
+  override def toString: String = {
+    toStrLines.mkString("\n")
   }
 
 }
