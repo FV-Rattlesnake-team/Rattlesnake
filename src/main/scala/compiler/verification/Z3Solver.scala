@@ -31,7 +31,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     val filepath = nextFilepath(idx)
     writeFile(smtScript, filepath, comments).map { _ =>
       runCommand(z3ExecName, filepath.toString)
-    }.getOrElse(Error("could not write file"))
+    }.recover(exc => Error(exc.getMessage)).get
   }
 
   override def check(smtScript: Commands.Script, timeoutSec: Int, comments: List[String], idx: Int): Result = {
@@ -39,7 +39,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     writeFile(smtScript, filepath, comments).map { _ =>
       val timeoutOption = s"-T:$timeoutSec"
       runCommand(z3ExecName, timeoutOption, filepath.toString)
-    }.getOrElse(Error("could not write file"))
+    }.recover(exc => Error(exc.getMessage)).get
   }
 
   private def clearDir(): Unit = {
