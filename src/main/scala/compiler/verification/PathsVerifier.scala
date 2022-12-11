@@ -3,7 +3,7 @@ package compiler.verification
 import compiler.CompilationStep.Verification
 import compiler.{CompilerStep, Position}
 import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
-import compiler.irs.{AstCollector, Asts}
+import compiler.irs.Asts
 import compiler.irs.Asts.*
 import compiler.verification.Solver.*
 import lang.Operator.*
@@ -20,7 +20,7 @@ import scala.annotation.tailrec
 
 final class PathsVerifier(
                            solver: Solver,
-                           timeoutSecOpt: Option[Int],
+                           timeoutSec: Int,
                            errorReporter: ErrorReporter,
                            logger: String => Unit
                          ) extends CompilerStep[List[Path], Boolean] {
@@ -40,9 +40,9 @@ final class PathsVerifier(
           }
           case Solver.Unsat =>
             genPrintableReport("success")
-          case Solver.Timeout => {
+          case Solver.Timeout(timeoutSec) => {
             correct = false
-            genPrintableReport("TIMEOUT")
+            genPrintableReport(s"TIMEOUT ($timeoutSec s)")
           }
           case Error(msg) => {
             correct = false
@@ -77,17 +77,13 @@ final class PathsVerifier(
       val implication = Implies(assumedFormulas.foldLeft(True())(Core.And(_, _)), convertedFormulaToProve)
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
       val comments = s"target: $descr" :: "" :: path.toStrLines
-      timeoutSecOpt match
-        case Some(timeout) =>
-          solver.check(script, timeout, comments, idx)
-        case None =>
-          solver.check(script, comments, idx)
+      solver.check(script, timeoutSec, comments, idx)
     }
   }
 
   // this function also considers the function names, which should not be a problem since these constants are just ignored
   private def allVariables(ast: Ast): List[(String, Type)] = {
-    AstCollector.collect(ast) {
+    ast.collectLs {
       case varRef@VariableRef(name) => {
         List((name, varRef.getType))
       }
@@ -120,8 +116,8 @@ final class PathsVerifier(
         // FIXME
         ???
       case _: Cast => Nil
-      case Sequence(stats, expr) =>
-        stats.flatMap(generateFormulas) ++ generateFormulas(expr)
+      case Sequence(stats, exprOpt) =>
+        stats.flatMap(generateFormulas) ++ exprOpt.flatMap(generateFormulas)
       case Block(stats) =>
         stats.flatMap(generateFormulas)
       case LocalDef(localName, _, rhs, _) =>
@@ -202,8 +198,10 @@ final class PathsVerifier(
           ??? // FIXME
         case cast@Cast(_, _) =>
           reportUnsupported("cast", cast.getPosition)
-        case Sequence(_, expr) =>
+        case Sequence(_, Some(expr)) =>
           transformExpr(expr)
+        case sequence: Sequence =>
+          reportUnsupported("no value returned", sequence.getPosition)
     }
   }
 

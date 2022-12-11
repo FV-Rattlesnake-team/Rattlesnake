@@ -37,8 +37,8 @@ object FunctionalChecker {
         isPurelyFunctional(cond) && isPurelyFunctional(thenBr) && isPurelyFunctional(elseBr)
       case Cast(expr, _) =>
         isPurelyFunctional(expr)
-      case Sequence(stats, expr) =>
-        stats.forall(isPurelyFunctional) && isPurelyFunctional(expr)
+      case Sequence(stats, exprOpt) =>
+        stats.forall(isPurelyFunctional) && exprOpt.exists(isPurelyFunctional)
       case Block(_) => false
       case LocalDef(_, _, rhs, isReassignable) =>
         !isReassignable && isPurelyFunctional(rhs)

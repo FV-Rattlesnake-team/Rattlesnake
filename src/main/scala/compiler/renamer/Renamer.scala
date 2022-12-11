@@ -61,8 +61,8 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
         Ternary(ren(cond), ren(thenBr), ren(elseBr))
       case Cast(expr, tpe) =>
         Cast(ren(expr), tpe)
-      case Sequence(stats, expr) =>
-        Sequence(stats.map(rename(_, ctx)), ren(expr))
+      case Sequence(stats, exprOpt) =>
+        Sequence(stats.map(rename(_, ctx)), exprOpt.map(ren))
       case VariableRef(name) => {
         val newName = ctx.currNameFor(name)
         VariableRef(newName)

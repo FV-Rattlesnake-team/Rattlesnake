@@ -87,8 +87,8 @@ object Path {
           Ternary(removeVars(cond), removeVars(thenBr), removeVars(elseBr))
         case Cast(expr, tpe) =>
           Cast(removeVars(expr), tpe)
-        case Sequence(stats, expr) =>
-          Sequence(stats.map(removeVars), removeVars(expr))
+        case Sequence(stats, exprOpt) =>
+          Sequence(stats.map(removeVars), exprOpt.map(removeVars))
       }
       res.setType(expr.getType)
     }

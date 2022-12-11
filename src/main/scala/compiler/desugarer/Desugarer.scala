@@ -139,7 +139,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
 
       case call@Call(callee@VariableRef(name), args) =>
         val funInfo = ctx.functions(name)
-        if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty) {
+        if (funInfo.isBuiltin) {
           Call(desugar(callee), args.map(desugar)).setType(callee.getType)
         } else {
           val argsUids = for _ <- funInfo.sig.argTypes yield uniqueIdGenerator.next()
@@ -157,21 +157,31 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
           // can do optDef.get because only built-in functions can have None as a funDef, and built-ins do not have postconditions
           // can call zip because the typechecker checked the number of arguments
           val resultLocalRef = VariableRef(resultUid).setType(funInfo.sig.retType)
-          val argsRenameMap = funInfo.optDef.get.params.map(_.paramName).zip(argsLocalReferences).toMap + (Result.str -> resultLocalRef)
+          val argsRenameMap = {
+            funInfo.optDef.get.params
+              .map(_.paramName)
+              .zip(argsLocalReferences)
+              .toMap + (Result.str -> resultLocalRef)   // resultLocalDef is ignored if return type is Void
+          }
+          val retIsNoValType = funInfo.sig.retType.isNoValType
           val newCall = Call(desugar(callee), argsLocalReferences).setType(funInfo.sig.retType)
-          Sequence(
+          val newCallLine = {
+            if retIsNoValType then newCall
+            else LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)
+          }
+          val stats = {
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
                 desugar(assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintStat(formula))
                   .setPositionSp(call.getPosition))
               ) ++
-              List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
+              List(newCallLine) ++
               funInfo.postcond.map(formula =>
                 desugar(assumption(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintStat(formula))
                   .setPositionSp(call.getPosition))
-              ),
-            resultLocalRef
-          )
+              )
+          }
+          Sequence(stats, if retIsNoValType then None else Some(resultLocalRef))
         }
 
       case Call(_, _) => assert(false)
@@ -187,7 +197,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
         val arrElemAssigStats = arrayElems.map(desugar).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
         }
-        Sequence(arrayValDefinition :: arrElemAssigStats, arrValRef)
+        Sequence(arrayValDefinition :: arrElemAssigStats, Some(arrValRef))
 
       case unaryOp@UnaryOp(operator, operand) =>
         if desugarOperators then desugarUnaryOp(unaryOp)
@@ -213,15 +223,15 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
       case Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
         if (thenBr.getType == NothingType) {
           val ifStat = IfThenElse(cond, thenBr, None)
-          desugar(Sequence(List(ifStat), elseBr))
+          desugar(Sequence(List(ifStat), Some(elseBr)))
         } else {
           val ifStat = IfThenElse(UnaryOp(ExclamationMark, cond).setType(BoolType), elseBr, None)
-          desugar(Sequence(List(ifStat), thenBr))
+          desugar(Sequence(List(ifStat), Some(thenBr)))
         }
       }
       case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
       case Cast(expr, tpe) => Cast(desugar(expr), tpe)
-      case Sequence(stats, expr) => Sequence(stats.map(desugar), desugar(expr))
+      case Sequence(stats, exprOpt) => Sequence(stats.map(desugar), exprOpt.map(desugar))
     }
     desugared.setTypeOpt(expr.getTypeOpt)
   }
@@ -331,7 +341,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
         case Ternary(cond, thenBr, elseBr) =>
           Ternary(addAssertsOnRetVals(cond), addAssertsOnRetVals(thenBr), addAssertsOnRetVals(elseBr))
         case Cast(expr, tpe) => Cast(addAssertsOnRetVals(expr), tpe)
-        case Sequence(stats, expr) => Sequence(stats.map(addAssertsOnRetVals), addAssertsOnRetVals(expr))
+        case Sequence(stats, exprOpt) => Sequence(stats.map(addAssertsOnRetVals), exprOpt.map(addAssertsOnRetVals))
         case retNone@ReturnStat(None) => retNone
 
         case retStat@ReturnStat(Some(retVal)) =>

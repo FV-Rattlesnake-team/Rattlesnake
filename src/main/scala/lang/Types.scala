@@ -23,6 +23,13 @@ object Types {
     def subtypeOrSupertype(that: Type): Boolean = {
       this.subtypeOf(that) || that.subtypeOf(this)
     }
+
+    def isNoValType: Boolean = {
+      this match
+        case PrimitiveType.VoidType => true
+        case PrimitiveType.NothingType => true
+        case _ => false
+    }
   }
   
   enum PrimitiveType(val str: String) extends Type {

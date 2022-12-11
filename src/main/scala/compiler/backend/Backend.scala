@@ -129,7 +129,7 @@ final class Backend[V <: ClassVisitor](
     ast match {
 
       case Block(stats) => generateSequence(ctx, stats, optFinalExpr = None)
-      case Sequence(stats, expr) => generateSequence(ctx, stats, Some(expr))
+      case Sequence(stats, exprOpt) => generateSequence(ctx, stats, exprOpt)
 
       case LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)

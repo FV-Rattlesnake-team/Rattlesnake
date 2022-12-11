@@ -14,6 +14,8 @@ object Main {
 
   private val cmdLineExitCode = -22
 
+  private val defaultVerifTimeout = 2
+
   private val java8Tag = "java8"
   private val java11Tag = "java11"
   private val java17Tag = "java17"
@@ -153,10 +155,13 @@ object Main {
     indent
   }
 
-  private def getTimeoutArg(argsMap: MutArgsMap): Option[Int] = {
-    val argStr = getValuedArg("timeout", argsMap, Some("-1"))
+  private def getTimeoutArg(argsMap: MutArgsMap): Int = {
+    val argStr = getValuedArg("timeout", argsMap, Some(defaultVerifTimeout.toString))
     val timeout = argStr.toIntOption.getOrElse(error(s"could not convert $argStr to an integer"))
-    if timeout > 0 then Some(timeout) else None
+    if (timeout <= 0){
+      error("timeout must be positive")
+    }
+    timeout
   }
 
   private def getPrintAllParenthesesArg(argsMap: MutArgsMap): Boolean = {
@@ -380,6 +385,7 @@ object Main {
         |verify: run formal verification on the input files
         | args: -out-dir=...: required, directory where to write the formula files (directory is created or cleared if
         |                     it already exists)
+        |       -timeout=...: optional, timeout in seconds of each query to the solver (2 seconds by default)
         |help: displays help (this)
         |""".stripMargin)
   }

@@ -26,19 +26,11 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     outputDir.resolve(s"z3input_$idx.smt")
   }
 
-
-  override def check(smtScript: Commands.Script, comments: List[String], idx: Int): Result = {
-    val filepath = nextFilepath(idx)
-    writeFile(smtScript, filepath, comments).map { _ =>
-      runCommand(z3ExecName, filepath.toString)
-    }.recover(exc => Error(exc.getMessage)).get
-  }
-
   override def check(smtScript: Commands.Script, timeoutSec: Int, comments: List[String], idx: Int): Result = {
     val filepath = nextFilepath(idx)
     writeFile(smtScript, filepath, comments).map { _ =>
       val timeoutOption = s"-T:$timeoutSec"
-      runCommand(z3ExecName, timeoutOption, filepath.toString)
+      runCommand(List(z3ExecName, timeoutOption, filepath.toString), timeoutSec)
     }.recover(exc => Error(exc.getMessage)).get
   }
 
@@ -65,7 +57,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     }
   }
 
-  private def runCommand(cmd: String*): Result = {
+  private def runCommand(cmd: List[String], timeoutSec: Int): Result = {
 
     // adapted from https://stackoverflow.com/questions/5711084/java-runtime-getruntime-getting-output-from-executing-a-command-line-program
 
@@ -76,7 +68,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
       reader.readLine() match {
         case "sat" => Sat
         case "unsat" => Unsat
-        case "timeout" => Timeout
+        case "timeout" => Timeout(timeoutSec)
         case s => Error(s)
       }
     }

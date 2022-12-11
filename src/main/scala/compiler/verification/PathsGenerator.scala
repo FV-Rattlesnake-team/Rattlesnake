@@ -34,10 +34,30 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
     def pathBuildersUpdated: List[Path.Builder] = pathBuilders.map(_.addStat(statement))
 
     statement match
-      case Sequence(stats, expr) =>
-        generatePaths(stats :+ expr, pathBuilders)
-      case _: Expr =>
-        pathBuildersUpdated
+      case Sequence(stats, exprOpt) =>
+        generatePaths(stats ++ exprOpt, pathBuilders)
+      case Call(_, args) =>
+        generatePaths(args, pathBuilders)
+      case _: (Literal | VariableRef) =>
+        pathBuilders
+      case Indexing(indexed, arg) =>
+        generatePaths(List(indexed, arg), pathBuilders)
+      case ArrayInit(_, size) =>
+        generatePaths(size, pathBuilders)
+      case FilledArrayInit(arrayElems) =>
+        generatePaths(arrayElems, pathBuilders)
+      case StructInit(_, args) =>
+        generatePaths(args, pathBuilders)
+      case UnaryOp(_, operand) =>
+        generatePaths(operand, pathBuilders)
+      case BinaryOp(lhs, _, rhs) =>
+        generatePaths(List(lhs, rhs), pathBuilders)
+      case Select(lhs, _) =>
+        generatePaths(lhs, pathBuilders)
+      case Ternary(cond, thenBr, elseBr) =>
+        generatePaths(List(cond, thenBr, elseBr), pathBuilders)
+      case Cast(expr, _) =>
+        generatePaths(expr, pathBuilders)
       case Block(stats) =>
         generatePaths(stats, pathBuilders)
       case _: LocalDef =>
@@ -55,7 +75,7 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
       case _: PanicStat =>
         pathBuildersUpdated
       case Assertion(formulaExpr, descr, isAssumed) =>
-        if (!isAssumed){
+        if (!isAssumed) {
           for pathB <- pathBuilders do {
             paths.addOne(pathB.builtWith(formulaExpr, descr))
           }

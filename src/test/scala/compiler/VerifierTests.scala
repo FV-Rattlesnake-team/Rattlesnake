@@ -22,11 +22,12 @@ class VerifierTests {
   @Test def reluFailTest(): Unit = runVerifTest("reluFail", false)
   @Test def squareTest(): Unit = runVerifTest("square", true)
   @Test def verifLoopTest(): Unit = runVerifTest("verifloop", true)
-  @Test def loopFailTest(): Unit = runVerifTest("loopFail", false)
+  @Test def loopFailTest1(): Unit = runVerifTest("loopFail1", false)
+  @Test def loopFailTest2(): Unit = runVerifTest("loopFail2", false)
   @Test def verifValTest(): Unit = runVerifTest("verifval", true)
 
-  private def runVerifTest(filename: String, expectedRes: Boolean, timeout: Int = 2): Unit = {
-    val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSecOpt = Some(timeout), logger = _ => ())
+  private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
+    val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())
     val path = s"$resDirPath/$filename.${FileExtensions.rattlesnake}"
     val actualRes = pipeline.apply(List(SourceFile(path)))
     assertEquals(expectedRes, actualRes)

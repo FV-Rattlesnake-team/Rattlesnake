@@ -11,6 +11,6 @@ require x % 5 == 0
 } ensure result % 5 == 0
 
 fn foo(){
-    val abc = 20;
+    val abc = 19;
     print(intToString(bar(abc)))
 }

@@ -121,7 +121,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if indexedError then UndefinedType else indexedType.asInstanceOf[ArrayType].elemType
 
       case arrayInit@ArrayInit(elemType, size) =>
-        if (elemType == VoidType || elemType == NothingType) {
+        if (elemType.isNoValType) {
           reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
         }
         val sizeType = check(size, ctx)

@@ -27,8 +27,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Block(stats) =>
         addBracesList(stats, ";", onMultipleLines = true)
 
-      case Sequence(stats, expr) =>
-        addBracesList(stats :+ expr, ";", onMultipleLines = true)
+      case Sequence(stats, exprOpt) =>
+        addBracesList(stats ++ exprOpt, ";", onMultipleLines = true)
 
       case FunDef(funName, args, optRetType, body, precond, postcond) =>
         pps
