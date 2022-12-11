@@ -87,7 +87,7 @@ object TasksPipelines {
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
   }
 
-  def verifier(outputDirPath: Path, timeoutSecOpt: Option[Int]): CompilerStep[List[SourceCodeProvider], Boolean] = {
+  def verifier(outputDirPath: Path, timeoutSecOpt: Option[Int], logger: String => Unit): CompilerStep[List[SourceCodeProvider], Boolean] = {
     val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
@@ -95,7 +95,7 @@ object TasksPipelines {
       .andThen(new Desugarer(desugarOperators = false, desugarStringEq = false, desugarPanic = true))
       .andThen(new Renamer())
       .andThen(new PathsGenerator())
-      .andThen(new PathsVerifier(Z3Solver(outputDirPath), timeoutSecOpt, er))
+      .andThen(new PathsVerifier(Z3Solver(outputDirPath), timeoutSecOpt, er, logger))
   }
 
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,

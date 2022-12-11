@@ -307,7 +307,8 @@ object Main {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val verifier = TasksPipelines.verifier(
         getOutDirArg(argsMap),
-        getTimeoutArg(argsMap)
+        getTimeoutArg(argsMap),
+        logger = println
       )
       reportUnknownArgsIfAny(argsMap)
       val correct = verifier.apply(sources)

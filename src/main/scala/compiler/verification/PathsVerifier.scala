@@ -18,7 +18,12 @@ import smtlib.trees.Commands.{CheckSatAssuming, Command, DeclareConst, PropLiter
 
 import scala.annotation.tailrec
 
-final class PathsVerifier(solver: Solver, timeoutSecOpt: Option[Int], errorReporter: ErrorReporter) extends CompilerStep[List[Path], Boolean] {
+final class PathsVerifier(
+                           solver: Solver,
+                           timeoutSecOpt: Option[Int],
+                           errorReporter: ErrorReporter,
+                           logger: String => Unit
+                         ) extends CompilerStep[List[Path], Boolean] {
 
   override def apply(paths: List[Path]): Boolean = {
     var correct = true
@@ -27,7 +32,7 @@ final class PathsVerifier(solver: Solver, timeoutSecOpt: Option[Int], errorRepor
 
       def genPrintableReport(msg: String): String = s"$base1Idx: ${path.descr} ====> $msg"
 
-      println(
+      logger(
         verify(path, base1Idx, errorReporter) match
           case Solver.Sat => {
             correct = false

@@ -18,7 +18,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     if (dir.exists()){
       clearDir()
     } else {
-      dir.createNewFile()
+      dir.mkdir()
     }
   }
 
@@ -50,9 +50,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
 
   private def writeFile(script: Script, tmpFilePath: java.nio.file.Path, comments: List[String]): Try[Unit] = {
     val file = tmpFilePath.toFile
-    if (!file.exists()) {
-      Files.createFile(tmpFilePath)
-    }
+    file.createNewFile()
     Using(new FileWriter(file)) { writer =>
       writeComments(comments, writer)
       val printer = smtlib.printer.RecursivePrinter

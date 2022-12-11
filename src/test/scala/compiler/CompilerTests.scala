@@ -1,29 +1,29 @@
 package compiler
 
 import compiler.io.SourceFile
-import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertThat, assertTrue, fail}
+import org.junit.Assert.*
 import org.junit.rules.ExpectedException
 import org.junit.{After, Before, Rule, Test}
+import org.objectweb.asm.Opcodes.V1_8
+import testutil.TestsIO
 
 import java.io.*
+import java.lang.reflect.InvocationTargetException
 import java.net.URLClassLoader
 import java.nio.file.{Files, Path}
+import java.util.regex.Matcher
 import java.util.spi.ToolProvider
 import scala.reflect.ClassTag
 import scala.util.Using
-import org.objectweb.asm.Opcodes.V1_8
-
-import java.lang.reflect.InvocationTargetException
-import java.util.regex.Matcher
 
 class CompilerTests {
 
-  private val tmpTestDir = "testtmp"
+  private val tmpTestDir = "compilerTestsTmp"
   private val javaVersionCode = V1_8
 
   @After
   def deleteTmpDir(): Unit = {
-    deleteRecursively(new File(tmpTestDir))
+    TestsIO.deleteRecursively(new File(tmpTestDir))
   }
 
   @Test
@@ -76,7 +76,7 @@ class CompilerTests {
         if (x >= -5) {
           -12
         } else if (x > -11) {
-          if (x != -7){
+          if (x != -7) {
             -742
           } else {
             1521
@@ -99,7 +99,7 @@ class CompilerTests {
     val actualResults = compileAndExecSeveralIter("comparisons", "testFunc", range.map(Array[Any](_)).toList)
     for i <- range do {
       val exp = scalaImplementation(i)
-      val act = actualResults(i-range.start)
+      val act = actualResults(i - range.start)
       assertEquals(exp, act)
     }
   }
@@ -169,7 +169,7 @@ class CompilerTests {
 
   @Test
   def returnVoidTest(): Unit = {
-    val argArray = new Array[Int](2)   // content should be written by the function under test
+    val argArray = new Array[Int](2) // content should be written by the function under test
     compileAndExecOneIter("voidret", "main", argArray)
     assertEquals(argArray(0), -15)
     assertEquals(argArray(1), 20)
@@ -180,7 +180,7 @@ class CompilerTests {
     val res = compileAndExecOneIter("arraylit", "createArray")
     assertTrue(res.isInstanceOf[Array[Double]])
     val resArray = res.asInstanceOf[Array[Double]]
-    val exp = Array(361.0, 14.31, -2.1, 11+9.4, -5.0*28, 94.35*32.21)
+    val exp = Array(361.0, 14.31, -2.1, 11 + 9.4, -5.0 * 28, 94.35 * 32.21)
     val tol = 1e-8
     assertArrayEquals(exp, resArray, tol)
   }
@@ -201,7 +201,9 @@ class CompilerTests {
     val res = compileAndExecOneIter("equality", "testFunc")
     assertTrue(res.isInstanceOf[Array[Boolean]])
     val exp = Array(true, true, false, true, true, false, true, false, false, true)
+
     def convert(b: Boolean) = if b then 1 else 0
+
     assertArrayEquals(exp.map(convert), res.asInstanceOf[Array[Boolean]].map(convert))
   }
 
@@ -259,9 +261,9 @@ class CompilerTests {
 
   @Test
   def violatedPreconditionTest(): Unit = {
-    assertThrowsInvocationTarget{
+    assertThrowsInvocationTarget {
       () => compileAndExecOneIter("prepostcond", "testF", Array(1, 2, 3, 4), 4)
-    }{ e =>
+    } { e =>
       assertTrue(e.getMessage.contains("idx < #xs"))
     }
   }
@@ -270,7 +272,7 @@ class CompilerTests {
   def violatedPostconditionTest(): Unit = {
     assertThrowsInvocationTarget {
       () => compileAndExecOneIter("prepostcond", "testF", Array(2, 1, 5, 3, 7, 9, 0, 10, 25, 12, 19), 8)
-    }{ e =>
+    } { e =>
       assertTrue(e.getMessage.contains("result == \"yes\" || result == \"no\""))
     }
   }
@@ -280,7 +282,7 @@ class CompilerTests {
     val counter = Array(0)
     assertThrowsInvocationTarget {
       () => compileAndExecOneIter("assertions", "testFunc", "rattlesnake", "bushmaster", counter)
-    }{ e =>
+    } { e =>
       assertTrue(e.getMessage.contains("#x == #y"))
     }
     assertEquals(0, counter(0))
@@ -291,7 +293,7 @@ class CompilerTests {
     val counter = Array(0)
     assertThrowsInvocationTarget {
       () => compileAndExecOneIter("assertions", "testFunc", "cobra", "mamba", counter)
-    }{ e =>
+    } { e =>
       assertTrue(e.getMessage.contains("j > i"))
     }
     assertEquals(4, counter(0))
@@ -303,7 +305,7 @@ class CompilerTests {
     val inputStr = "EPFL > ETH :-)"
     assertThrowsInvocationTarget {
       () => compileAndExecOneIter("forinvar", "bar", inputStr, 21, counter)
-    }{ e =>
+    } { e =>
       assertTrue(e.getMessage.contains("i < #y"))
     }
     assertEquals(inputStr.length, counter(0))
@@ -330,9 +332,9 @@ class CompilerTests {
   }
 
   /**
-   * @param srcFileName the name of the source file
+   * @param srcFileName      the name of the source file
    * @param testedMethodName the method to be called
-   * @param argsPerIter a list of arrays, each containing the arguments to be provided to the tested function during an iteration
+   * @param argsPerIter      a list of arrays, each containing the arguments to be provided to the tested function during an iteration
    * @return the values returnes by each iteration
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
@@ -363,16 +365,6 @@ class CompilerTests {
 
   private def getFieldValue(obj: Any, fieldName: String): Any = {
     obj.getClass.getField(fieldName).get(obj)
-  }
-
-  private def deleteRecursively(file: File): Unit = {
-    val subFiles = file.listFiles()
-    if (subFiles != null) {
-      for file <- subFiles do {
-        deleteRecursively(file)
-      }
-    }
-    Files.delete(file.toPath)
   }
 
   extension (str: String) private def withHeadUppercase: String = {
