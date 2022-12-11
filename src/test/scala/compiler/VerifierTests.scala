@@ -23,7 +23,7 @@ class VerifierTests {
   @Test def squareTest(): Unit = runVerifTest("square", true)
   @Test def verifLoopTest(): Unit = runVerifTest("verifloop", true)
   @Test def loopFailTest(): Unit = runVerifTest("loopFail", false)
-  @Test def verifValTest(): Unit = runVerifTest("verifVal", true)
+  @Test def verifValTest(): Unit = runVerifTest("verifval", true)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeout: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSecOpt = Some(timeout), logger = _ => ())
