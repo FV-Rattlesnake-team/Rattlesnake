@@ -341,7 +341,7 @@ class CompilerTests {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
     val outputName = srcFileName.withHeadUppercase + "_core"
     val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName)
-    val testFile = SourceFile(s"src/test/res/$srcFileName.${FileExtensions.rattlesnake}")
+    val testFile = SourceFile(s"src/test/res/compiler/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {
       for path <- writtenFilesPaths yield {
