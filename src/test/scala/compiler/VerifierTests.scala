@@ -26,7 +26,7 @@ class VerifierTests {
   @Test def verifValTest(): Unit = runVerifTest("verifval", true)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeout: Int = 2): Unit = {
-    val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSecOpt = Some(timeout), logger = println)
+    val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSecOpt = Some(timeout), logger = _ => ())
     val path = s"$resDirPath/$filename.${FileExtensions.rattlesnake}"
     val actualRes = pipeline.apply(List(SourceFile(path)))
     assertEquals(expectedRes, actualRes)
