@@ -4,6 +4,7 @@ import compiler.verification.Solver
 import Solver.*
 import smtlib.trees.Commands.{CheckSat, Script}
 import smtlib.trees.{Commands, Terms}
+import util.IO
 
 import java.io.{BufferedReader, FileWriter, InputStreamReader}
 import java.nio.file.Files
@@ -36,7 +37,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
 
   private def clearDir(): Unit = {
     for file <- outputDir.toFile.listFiles() do {
-      file.delete()
+      IO.deleteRecursively(file)
     }
   }
 

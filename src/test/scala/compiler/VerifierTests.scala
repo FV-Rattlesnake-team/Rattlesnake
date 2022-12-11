@@ -4,7 +4,7 @@ import compiler.io.SourceFile
 import compiler.verification.Solver
 import org.junit.Assert.assertEquals
 import org.junit.{After, Before, Test}
-import testutil.TestsIO
+import util.IO
 
 import java.io.File
 import java.nio.file.Paths
@@ -14,7 +14,7 @@ class VerifierTests {
   private val resDirPath = "src/test/res/verif"
 
   @After def deleteTmpDir(): Unit = {
-    TestsIO.deleteRecursively(new File(outputDirPath))
+    IO.deleteRecursively(new File(outputDirPath))
   }
 
   @Test def answer42Test(): Unit = runVerifTest("answer42", true)

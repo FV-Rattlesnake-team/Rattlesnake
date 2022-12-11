@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.rules.ExpectedException
 import org.junit.{After, Before, Rule, Test}
 import org.objectweb.asm.Opcodes.V1_8
-import testutil.TestsIO
+import util.IO
 
 import java.io.*
 import java.lang.reflect.InvocationTargetException
@@ -23,7 +23,7 @@ class CompilerTests {
 
   @After
   def deleteTmpDir(): Unit = {
-    TestsIO.deleteRecursively(new File(tmpTestDir))
+    IO.deleteRecursively(new File(tmpTestDir))
   }
 
   @Test

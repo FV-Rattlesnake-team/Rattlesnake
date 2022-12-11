@@ -1,9 +1,9 @@
-package testutil
+package util
 
 import java.io.File
 import java.nio.file.Files
 
-object TestsIO {
+object IO {
 
   def deleteRecursively(file: File): Unit = {
     val subFiles = file.listFiles()
@@ -14,5 +14,5 @@ object TestsIO {
     }
     Files.delete(file.toPath)
   }
-
+  
 }
