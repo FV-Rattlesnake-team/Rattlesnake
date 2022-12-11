@@ -391,7 +391,7 @@ object Asts {
     }
   }
 
-  final case class Assertion(formulaExpr: Expr, descr: String, isAssumed: Boolean = false) extends Statement {
+  final case class Assertion(formulaExpr: Expr, descr: String, isAssumed: Boolean) extends Statement {
     override def children: List[Ast] = List(formulaExpr)
 
     /**

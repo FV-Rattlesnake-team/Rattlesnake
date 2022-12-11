@@ -270,7 +270,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "panicStat"
 
   private lazy val assertStat = {
-    kw(Assert).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintStat(formula)))
+    kw(Assert).ignored ::: expr map (formula => Assertion(formula, PrettyPrinter.prettyPrintStat(formula), isAssumed = false))
   } setName "assertStat"
 
   private lazy val assumeStat = {

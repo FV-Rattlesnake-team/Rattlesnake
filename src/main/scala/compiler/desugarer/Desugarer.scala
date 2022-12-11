@@ -121,7 +121,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
   }
 
   private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): Statement = {
-    if desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat))
+    if desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat), isAssumed = false)
     else PanicStat(desugar(panicStat.msg))
   }
 
@@ -387,7 +387,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
   }
 
   private def assertion(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
-    Assertion(desugar(formula), descr)
+    Assertion(desugar(formula), descr, isAssumed = false)
   }
 
 }
