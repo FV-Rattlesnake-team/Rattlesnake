@@ -56,7 +56,6 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
       val printer = smtlib.printer.RecursivePrinter
       printer.printScript(script, writer)
       printer.printCommand(CheckSat(), writer)
-      writer.flush()
     }
   }
 
