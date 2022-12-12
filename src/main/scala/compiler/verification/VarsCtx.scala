@@ -22,7 +22,7 @@ final class VarsCtx {
   
   private def makeName(rawName: String, idx: Int): String = {
     if idx == 0 then rawName
-    else rawName ++ "_" ++ idx.toString
+    else rawName ++ "%" ++ idx.toString
   }
   
 }

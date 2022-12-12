@@ -1,14 +1,15 @@
-package compiler.verification
+package compiler.verification.solver
 
-import compiler.verification.Solver
-import Solver.*
-import smtlib.trees.Commands.{CheckSat, Script}
+import compiler.verification.solver.Solver
+import compiler.verification.solver.Solver.*
+import smtlib.trees.Commands.{CheckSat, GetModel, Script}
 import smtlib.trees.{Commands, Terms}
 import util.IO
 
 import java.io.{BufferedReader, FileWriter, InputStreamReader}
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try, Using}
 
 final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
@@ -16,7 +17,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
 
   {
     val dir = outputDir.toFile
-    if (dir.exists()){
+    if (dir.exists()) {
       clearDir()
     } else {
       dir.mkdir()
@@ -49,6 +50,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
       val printer = smtlib.printer.RecursivePrinter
       printer.printScript(script, writer)
       printer.printCommand(CheckSat(), writer)
+      printer.printCommand(GetModel(), writer)
     }
   }
 
@@ -66,12 +68,28 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     val command = cmd.mkString(" ")
     val process = runtime.exec(command)
     val tryRes = Using(new BufferedReader(new InputStreamReader(process.getInputStream))) { reader =>
+
+      @tailrec def read(prevLinesRev: List[String]): String = {
+        val line = reader.readLine()
+        if (line != null) {
+          read(line :: prevLinesRev)
+        } else {
+          prevLinesRev.reverse.mkString("\n")
+        }
+      }
+
       reader.readLine() match {
-        case "sat" => Sat
+        case "sat" => {
+          Z3OutputParser.parse(read(Nil)) match {
+            case Failure(exception) => Error(exception.getMessage)
+            case Success(assig) => Sat(assig)
+          }
+        }
         case "unsat" => Unsat
         case "timeout" => Timeout(timeoutSec)
         case s => Error(s)
       }
+
     }
     tryRes match {
       case Failure(exception) => Error(exception.getMessage)

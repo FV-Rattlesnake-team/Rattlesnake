@@ -1,7 +1,7 @@
 package compiler
 
 import compiler.io.SourceFile
-import compiler.verification.Solver
+import compiler.verification.solver.Solver
 import org.junit.Assert.assertEquals
 import org.junit.{After, Before, Test}
 import util.IO

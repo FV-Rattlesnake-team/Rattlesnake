@@ -5,7 +5,8 @@ import compiler.{CompilerStep, Position}
 import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts
 import compiler.irs.Asts.*
-import compiler.verification.Solver.*
+import compiler.verification.solver.Solver
+import compiler.verification.solver.Solver.*
 import lang.Operator.*
 import lang.{Operator, Types}
 import lang.Types.PrimitiveType.*
@@ -34,9 +35,15 @@ final class PathsVerifier(
 
       logger(
         verify(path, base1Idx, errorReporter) match
-          case Solver.Sat => {
+          case Solver.Sat(assig) => {
             correct = false
-            genPrintableReport("FAILURE")
+            val varsAssigDescr = {
+              assig
+                .filter((name, _) => isOriginalVarName(name))
+                .map((name, value) => s"$name = $value")
+                .mkString(", ")
+            }
+            genPrintableReport(s"FAILURE: $varsAssigDescr")
           }
           case Solver.Unsat =>
             genPrintableReport("success")
@@ -271,6 +278,11 @@ final class PathsVerifier(
     errorReporter.push(Err(Verification, "Not supported: " ++ msg, posOpt))
     errorFlag.set()
     null
+  }
+
+  private def isOriginalVarName(name: String): Boolean = {
+    require(name.nonEmpty)
+    name.head.isLetter && name.tail.forall(char => char.isLetterOrDigit || char == '_')
   }
 
 }

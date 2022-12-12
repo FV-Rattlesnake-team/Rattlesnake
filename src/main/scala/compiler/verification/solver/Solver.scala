@@ -1,5 +1,6 @@
-package compiler.verification
+package compiler.verification.solver
 
+import compiler.verification.solver.Solver
 import smtlib.trees.Commands.Script
 import smtlib.trees.Terms.Term
 
@@ -12,7 +13,7 @@ trait Solver {
 object Solver {
 
   sealed trait Result
-  case object Sat extends Result
+  final case class Sat(varsAssig: Map[String, String]) extends Result
   case object Unsat extends Result
   final case class Timeout(timeoutSec: Int) extends Result
   final case class Error(msg: String) extends Result

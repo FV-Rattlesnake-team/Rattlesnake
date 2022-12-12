@@ -11,7 +11,8 @@ import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.renamer.Renamer
 import compiler.typechecker.TypeChecker
-import compiler.verification.{PathsGenerator, PathsVerifier, Z3Solver}
+import compiler.verification.solver.Z3Solver
+import compiler.verification.{PathsGenerator, PathsVerifier}
 import org.objectweb.asm.ClassVisitor
 
 import java.nio.file.Path
