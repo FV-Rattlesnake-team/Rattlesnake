@@ -31,29 +31,30 @@ final class PathsVerifier(
     for ((path, idx) <- paths.zipWithIndex) do {
       val base1Idx = idx + 1
 
-      def genPrintableReport(msg: String): String = s"$base1Idx: ${path.descr} ====> $msg"
+      def genPrintableReport(msg: String, counterEx: Option[Map[String, String]]): String = {
+        s"$base1Idx - $msg : ${path.descr}" ++ (if counterEx.isEmpty then "" else "\n\t Counter-example: ") ++
+          counterEx
+            .getOrElse(Map.empty)
+            .filter((name, _) => isOriginalVarName(name))
+            .map((name, value) => s"$name = $value")
+            .mkString(", ")
+      }
 
       logger(
         verify(path, base1Idx, errorReporter) match
           case Solver.Sat(assig) => {
             correct = false
-            val varsAssigDescr = {
-              assig
-                .filter((name, _) => isOriginalVarName(name))
-                .map((name, value) => s"$name = $value")
-                .mkString(", ")
-            }
-            genPrintableReport(s"FAILURE: $varsAssigDescr")
+            genPrintableReport("FAILURE", Some(assig))
           }
           case Solver.Unsat =>
-            genPrintableReport("success")
+            genPrintableReport("success", None)
           case Solver.Timeout(timeoutSec) => {
             correct = false
-            genPrintableReport(s"TIMEOUT ($timeoutSec s)")
+            genPrintableReport(s"TIMEOUT ($timeoutSec s)", None)
           }
           case Error(msg) => {
             correct = false
-            genPrintableReport("ERROR: " ++ msg)
+            genPrintableReport("ERROR: " ++ msg, None)
           }
       )
     }
@@ -79,7 +80,7 @@ final class PathsVerifier(
     if (errorFlag.isSet) {
       Solver.Error("solver error")
     } else {
-      val vars = (formulaToProve :: stats).flatMap(allVariables).toMap.toList   // eliminate duplicates
+      val vars = (formulaToProve :: stats).flatMap(allVariables).toMap.toList // eliminate duplicates
       val varsDecls = vars.map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
       val implication = Implies(assumedFormulas.foldLeft(True())(Core.And(_, _)), convertedFormulaToProve)
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
@@ -178,9 +179,9 @@ final class PathsVerifier(
         case unaryOp: UnaryOp =>
           throw new AssertionError(s"unexpected: $unaryOp")
         case binOp@BinaryOp(lhs, operator, rhs) => {
-          if (operator == Equality){
+          if (operator == Equality) {
             Equals(transformExpr(lhs), transformExpr(rhs))
-          } else if (lhs.getType.subtypeOf(BoolType)){
+          } else if (lhs.getType.subtypeOf(BoolType)) {
             val transformedLhs = transformExpr(lhs)
             val transformedRhs = transformExpr(rhs)
             operator match {

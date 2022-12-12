@@ -62,7 +62,7 @@ object Replacer {
       case ReturnStat(optVal) =>
         ReturnStat(optVal.map(replaceInExprImpl))
       case Assertion(formulaExpr, descr, isAssumed) =>
-        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
+        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPosition(stat.getPosition)
       case panicStat: PanicStat =>
         panicStat
       case LocalDef(localName, optType, rhs, isReassignable) =>

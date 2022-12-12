@@ -13,7 +13,7 @@ object Asts {
     // Each AST is assigned the position of its leftmost token (by the map method of TreeParser)
     private var positionOpt: Option[Position] = None
 
-    final def setPosition(posOpt: Option[Position]): Unit = {
+    def setPosition(posOpt: Option[Position]): Unit = {
       positionOpt = posOpt
     }
 
@@ -391,8 +391,19 @@ object Asts {
     }
   }
 
-  final case class Assertion(formulaExpr: Expr, descr: String, isAssumed: Boolean) extends Statement {
+  final case class Assertion(formulaExpr: Expr, private val _descr: String, isAssumed: Boolean) extends Statement {
+    private var description: String = _descr
+
+    def descr: String = description
+
     override def children: List[Ast] = List(formulaExpr)
+
+    override def setPosition(posOpt: Option[Position]): Unit = {
+      super.setPosition(posOpt)
+      posOpt.foreach { pos =>
+        description += s" at ${pos.toStringSimpleFilename}"
+      }
+    }
 
     /**
      * Specialized version of `setPosition`: set the position and return this
