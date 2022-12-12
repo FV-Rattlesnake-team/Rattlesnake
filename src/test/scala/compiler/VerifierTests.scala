@@ -25,6 +25,8 @@ class VerifierTests {
   @Test def loopFailTest1(): Unit = runVerifTest("loopFail1", false)
   @Test def loopFailTest2(): Unit = runVerifTest("loopFail2", false)
   @Test def verifValTest(): Unit = runVerifTest("verifval", true)
+  @Test def maxTest(): Unit = runVerifTest("max", true)
+  @Test def maxFailTest(): Unit = runVerifTest("maxFail", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())

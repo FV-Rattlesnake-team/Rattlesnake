@@ -69,22 +69,17 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     val process = runtime.exec(command)
     val tryRes = Using(new BufferedReader(new InputStreamReader(process.getInputStream))) { reader =>
 
-      @tailrec def read(prevLinesRev: List[String]): String = {
+      @tailrec def read(prevLinesRev: List[String]): List[String] = {
         val line = reader.readLine()
         if (line != null) {
           read(line :: prevLinesRev)
         } else {
-          prevLinesRev.reverse.mkString("\n")
+          prevLinesRev.reverse
         }
       }
 
       reader.readLine() match {
-        case "sat" => {
-          Z3OutputParser.parse(read(Nil)) match {
-            case Failure(exception) => Error(exception.getMessage)
-            case Success(assig) => Sat(assig)
-          }
-        }
+        case "sat" => Sat(Z3OutputParser.parse(read(Nil)))
         case "unsat" => Unsat
         case "timeout" => Timeout(timeoutSec)
         case s => Error(s)

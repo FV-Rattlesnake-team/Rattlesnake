@@ -17,7 +17,10 @@ import smtlib.theories.Ints.IntSort
 import smtlib.trees.Terms.*
 import smtlib.trees.Commands.{CheckSatAssuming, Command, DeclareConst, PropLiteral, Script, Assert as AssertCmd}
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
+import scala.collection.mutable.ListBuffer
+import scala.util.{Failure, Success}
 
 final class PathsVerifier(
                            solver: Solver,
@@ -26,35 +29,48 @@ final class PathsVerifier(
                            logger: String => Unit
                          ) extends CompilerStep[List[Path], Boolean] {
 
+  private val atomicIntUid = new AtomicInteger(0)
+
+  private def nextNameForNewVar(): String = {
+    "%" ++ atomicIntUid.incrementAndGet().toString
+  }
+
   override def apply(paths: List[Path]): Boolean = {
     var correct = true
     for ((path, idx) <- paths.zipWithIndex) do {
       val base1Idx = idx + 1
 
-      def genPrintableReport(msg: String, counterEx: Option[Map[String, String]]): String = {
-        s"$base1Idx - $msg : ${path.descr}" ++ (if counterEx.isEmpty then "" else "\n\t Counter-example: ") ++
-          counterEx
-            .getOrElse(Map.empty)
-            .filter((name, _) => isOriginalVarName(name))
-            .map((name, value) => s"$name = $value")
-            .mkString(", ")
+      def genPrintableReport(msg: String, assigStr: String = ""): String = {
+        s"$base1Idx - $msg : ${path.descr} $assigStr"
       }
 
       logger(
         verify(path, base1Idx, errorReporter) match
           case Solver.Sat(assig) => {
             correct = false
-            genPrintableReport("FAILURE", Some(assig))
+            val assigStr = {
+              assig match
+                case Failure(exception) =>
+                  exception.getMessage
+                case Success(assigMap) => {
+                  val prefix = if assigMap.isEmpty then "" else "Counter-example: "
+                  assigMap
+                    .filter((name, _) => isOriginalVarName(name))
+                    .map((name, value) => s"$name = $value")
+                    .mkString(prefix, ", ", "")
+                }
+            }
+            genPrintableReport("FAILURE", assigStr)
           }
           case Solver.Unsat =>
-            genPrintableReport("success", None)
+            genPrintableReport("success")
           case Solver.Timeout(timeoutSec) => {
             correct = false
-            genPrintableReport(s"TIMEOUT ($timeoutSec s)", None)
+            genPrintableReport(s"TIMEOUT ($timeoutSec s)")
           }
           case Error(msg) => {
             correct = false
-            genPrintableReport("ERROR: " ++ msg, None)
+            genPrintableReport("ERROR: " ++ msg)
           }
       )
     }
@@ -75,14 +91,23 @@ final class PathsVerifier(
   private def verify(path: Path, idx: Int, errorReporter: ErrorReporter): Solver.Result = {
     val Path(stats, formulaToProve, descr) = path
     val errorFlag = new ErrorFlag()
-    val assumedFormulas = stats.flatMap(generateFormulas(_)(errorReporter, errorFlag))
-    val convertedFormulaToProve = transformExpr(formulaToProve)(errorReporter, errorFlag)
+    val additionalVarsBuffer = ListBuffer.empty[(String, Type)]
+    val additionalFormulasBuffer = ListBuffer.empty[Term]
+    val assumedFormulas = stats.flatMap(generateFormulas(_)(errorReporter, errorFlag, additionalVarsBuffer, additionalFormulasBuffer))
+    val convertedFormulaToProve = transformExpr(formulaToProve)(errorReporter, errorFlag, additionalVarsBuffer, additionalFormulasBuffer)
     if (errorFlag.isSet) {
       Solver.Error("solver error")
     } else {
       val vars = (formulaToProve :: stats).flatMap(allVariables).toMap.toList // eliminate duplicates
-      val varsDecls = vars.map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
-      val implication = Implies(assumedFormulas.foldLeft(True())(Core.And(_, _)), convertedFormulaToProve)
+      val varsDecls = {
+        (vars ++ additionalVarsBuffer)
+          .map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
+      }
+      val implication = Implies(
+        (assumedFormulas ++ additionalFormulasBuffer)
+          .foldLeft(True())(Core.And(_, _)),
+        convertedFormulaToProve
+      )
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
       val comments = s"target: $descr" :: "" :: path.toStrLines
       solver.check(script, timeoutSec, comments, idx)
@@ -102,7 +127,12 @@ final class PathsVerifier(
     }
   }
 
-  private def generateFormulas(statement: Statement)(implicit errorReporter: ErrorReporter, errorFlag: ErrorFlag): List[Term] = {
+  private def generateFormulas(statement: Statement)(
+    implicit errorReporter: ErrorReporter,
+    errorFlag: ErrorFlag,
+    additVarsBuffer: ListBuffer[(String, Type)],
+    additFormulasBuffer: ListBuffer[Term]
+  ): List[Term] = {
 
     extension (term: Term) def toSingletonList: List[Term] = List(term)
 
@@ -121,8 +151,7 @@ final class PathsVerifier(
       case _: BinaryOp => Nil
       case _: Select => Nil
       case Ternary(cond, thenBr, elseBr) =>
-        // FIXME
-        ???
+        generateFormulas(cond) ++ generateFormulas(thenBr) ++ generateFormulas(elseBr)
       case _: Cast => Nil
       case Sequence(stats, exprOpt) =>
         stats.flatMap(generateFormulas) ++ exprOpt.flatMap(generateFormulas)
@@ -136,7 +165,12 @@ final class PathsVerifier(
         throw new AssertionError(s"unexpected $statement")
   }
 
-  private def transformExpr(expr: Expr)(implicit er: ErrorReporter, errorFlag: ErrorFlag): Term = {
+  private def transformExpr(expr: Expr)(
+    implicit er: ErrorReporter,
+    errorFlag: ErrorFlag,
+    additVarsBuffer: ListBuffer[(String, Type)],
+    additFormulasBuffer: ListBuffer[Term]
+  ): Term = {
     if (expr.getType.subtypeOf(NothingType)) {
       reportUnsupported(s"expression with return type $NothingType", expr.getPosition)
     } else {
@@ -202,8 +236,15 @@ final class PathsVerifier(
         }
         case sel@Select(_, _) =>
           reportUnsupported("select", sel.getPosition)
-        case Ternary(cond, thenBr, elseBr) =>
-          ??? // FIXME
+        case ternary@Ternary(cond, thenBr, elseBr) =>
+          val newVarName = nextNameForNewVar()
+          val resVar = qid(newVarName)
+          val condTransformed = transformExpr(cond)
+          val thenTerm = Core.And(condTransformed, Equals(resVar, transformExpr(thenBr)))
+          val elseTerm = Core.And(Not(condTransformed), Equals(resVar, transformExpr(elseBr)))
+          additFormulasBuffer.addOne(Core.Or(thenTerm, elseTerm))
+          additVarsBuffer.addOne(newVarName -> ternary.getType)
+          resVar
         case cast@Cast(_, _) =>
           reportUnsupported("cast", cast.getPosition)
         case Sequence(_, Some(expr)) =>
@@ -238,8 +279,15 @@ final class PathsVerifier(
   }
 
   private def convertOperatorToIntsTheoryOps(
-                                              operator: Operator, lhs: Expr, rhs: Expr
-                                            )(implicit errorReporter: ErrorReporter, errorFlag: ErrorFlag): Term = {
+                                              operator: Operator,
+                                              lhs: Expr,
+                                              rhs: Expr
+                                            )(
+                                              implicit errorReporter: ErrorReporter,
+                                              errorFlag: ErrorFlag,
+                                              additVarsBuffer: ListBuffer[(String, Type)],
+                                              additFormulasBuffer: ListBuffer[Term]
+                                            ): Term = {
     val transformedLhs = transformExpr(lhs)
     val transformedRhs = transformExpr(rhs)
     operator match {
