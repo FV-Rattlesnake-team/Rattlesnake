@@ -22,7 +22,7 @@ import lang.SoftKeywords.Result
  *  - `x || y` ---> `when x then true else y`
  *  - `[x_1, ... , x_n]` ---> `val $0 = arr Int[n]; $0[0] = x_1; ... ; $0[n-1] = x_n; $0`
  */
-final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean = true, desugarPanic: Boolean = false)
+final class Desugarer(mode: Desugarer.Mode)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
   private val uniqueIdGenerator = new UniqueIdGenerator("$")
@@ -87,7 +87,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     )
     val newElseBrOpt = desugaredInitElseBrOpt.map { elseBr =>
       blockify(
-        List(assumption(desugaredNot(desugaredCond), "else assumption")),
+        List(assumption(not(desugaredCond), "else assumption")),
         elseBr,
         Nil
       )
@@ -104,7 +104,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     val whileBodyAssumptions = assumption(desugaredCond, "while body")
     val newBody = blockify(whileBodyAssumptions :: invarAssumed, whileLoop.body, desugaredInvariants)
     val loop = WhileLoop(desugaredCond, desugar(newBody), Nil)
-    val whileEndAssumption = assumption(desugaredNot(desugaredCond), "while end")
+    val whileEndAssumption = assumption(not(desugaredCond), "while end")
     blockify(desugaredInvariants, loop, whileEndAssumption :: invarAssumed)
   }
 
@@ -121,7 +121,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
   }
 
   private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): Statement = {
-    if desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat), isAssumed = false)
+    if mode.desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat), isAssumed = false)
     else PanicStat(desugar(panicStat.msg))
   }
 
@@ -137,10 +137,10 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
 
-      case call@Call(callee@VariableRef(name), args) =>
-        val funInfo = ctx.functions(name)
+      case call@Call(calleeName, args) =>
+        val funInfo = ctx.functions(calleeName)
         if (funInfo.isBuiltin) {
-          Call(desugar(callee), args.map(desugar)).setType(callee.getType)
+          Call(calleeName, args.map(desugar)).setType(funInfo.sig.retType)
         } else {
           val argsUids = for _ <- funInfo.sig.argTypes yield uniqueIdGenerator.next()
           val argsLocalDefsAndRefs = funInfo.sig.argTypes.indices.map { idx =>
@@ -164,7 +164,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
               .toMap + (Result.str -> resultLocalRef)   // resultLocalDef is ignored if return type is Void
           }
           val retIsNoValType = funInfo.sig.retType.isNoValType
-          val newCall = Call(desugar(callee), argsLocalReferences).setType(funInfo.sig.retType)
+          val newCall = Call(calleeName, argsLocalReferences).setType(funInfo.sig.retType)
           val newCallLine = {
             if retIsNoValType then newCall
             else LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)
@@ -184,8 +184,6 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
           Sequence(stats, if retIsNoValType then None else Some(resultLocalRef))
         }
 
-      case Call(_, _) => assert(false)
-
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems) =>
         val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
@@ -200,21 +198,21 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
         Sequence(arrayValDefinition :: arrElemAssigStats, Some(arrValRef))
 
       case unaryOp@UnaryOp(operator, operand) =>
-        if desugarOperators then desugarUnaryOp(unaryOp)
+        if mode.desugarOperators then desugarUnaryOp(unaryOp)
         else UnaryOp(operator, desugar(operand))
 
       case BinaryOp(lhs, Equality, rhs) if lhs.getType.subtypeOf(StringType) => {
         val desugaredLhs = desugar(lhs)
         val desugaredRhs = desugar(rhs)
-        if desugarStringEq then Call(
-          VariableRef(FunctionsToInject.stringEqualityMethodName).setType(UndefinedType),
+        if mode.desugarStringEq then Call(
+          FunctionsToInject.stringEqualityMethodName,
           List(desugaredLhs, desugaredRhs)
         ).setType(BoolType)
         else BinaryOp(desugaredLhs, Equality, desugaredRhs)
       }
 
       case binaryOp@BinaryOp(lhs, operator, rhs) =>
-        if desugarOperators then desugarBinaryOp(binaryOp)
+        if mode.desugarOperators then desugarBinaryOp(binaryOp)
         else BinaryOp(desugar(lhs), operator, desugar(rhs))
 
       case select: Select => Select(desugar(select.lhs), select.selected)
@@ -229,7 +227,9 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
           desugar(Sequence(List(ifStat), Some(thenBr)))
         }
       }
-      case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
+      case Ternary(cond, thenBr, elseBr) =>
+        // FIXME add assumptions
+        Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
       case Cast(expr, tpe) => Cast(desugar(expr), tpe)
       case Sequence(stats, exprOpt) => Sequence(stats.map(desugar), exprOpt.map(desugar))
     }
@@ -306,7 +306,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     if (rawAssertions.isEmpty) {
       stat
     } else {
-      val resStat = stat match {
+      val resStat: Statement = stat match {
         case Block(stats) => Block(stats.map(addAssertsOnRetVals))
         case LocalDef(localName, optType, rhs, isReassignable) =>
           LocalDef(localName, optType, addAssertsOnRetVals(rhs), isReassignable)
@@ -329,7 +329,7 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
           Assertion(addAssertsOnRetVals(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
         case literal: Literal => literal
         case variableRef: VariableRef => variableRef
-        case Call(callee, args) => Call(addAssertsOnRetVals(callee), args.map(addAssertsOnRetVals))
+        case Call(callee, args) => Call(callee, args.map(addAssertsOnRetVals))
         case Indexing(indexed, arg) => Indexing(addAssertsOnRetVals(indexed), addAssertsOnRetVals(arg))
         case ArrayInit(elemType, size) => ArrayInit(elemType, addAssertsOnRetVals(size))
         case FilledArrayInit(arrayElems) => FilledArrayInit(arrayElems.map(addAssertsOnRetVals))
@@ -370,8 +370,8 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     }
   }
 
-  private def desugaredNot(expr: Expr)(implicit analysisContext: AnalysisContext): Expr = {
-    desugar(UnaryOp(ExclamationMark, expr).setType(BoolType))
+  private def not(expr: Expr)(implicit analysisContext: AnalysisContext): Expr = {
+    UnaryOp(ExclamationMark, expr).setType(BoolType)
   }
 
   private def blockify(before: List[Statement], possiblyBlock: Statement, after: List[Statement]): Block = {
@@ -382,12 +382,42 @@ final class Desugarer(desugarOperators: Boolean = true, desugarStringEq: Boolean
     }
   }
 
+  private def sequencify(before: List[Statement], possiblySeq: Expr): Expr = {
+    possiblySeq match {
+      case Sequence(stats, exprOpt) =>
+        Sequence(before ++ stats, exprOpt)
+      case notSeq =>
+        Sequence(before, Some(notSeq))
+    }
+  }
+
   private def assumption(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
     Assertion(desugar(formula), descr, isAssumed = true)
   }
 
   private def assertion(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
     Assertion(desugar(formula), descr, isAssumed = false)
+  }
+
+}
+
+object Desugarer {
+
+  enum Mode(
+             val desugarOperators: Boolean,
+             val desugarStringEq: Boolean,
+             val desugarPanic: Boolean
+           ) {
+    case Compile extends Mode(
+      desugarOperators = true,
+      desugarStringEq = true,
+      desugarPanic = false
+    )
+    case Verify extends Mode(
+      desugarOperators = false,
+      desugarStringEq = false,
+      desugarPanic = true
+    )
   }
 
 }

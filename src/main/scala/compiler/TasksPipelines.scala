@@ -67,7 +67,7 @@ object TasksPipelines {
    */
   def desugarer(outputDirectoryPath: Path,
                 filename: String,
-                desugarOperators: Boolean,
+                desugarerMode: Desugarer.Mode,
                 indentGranularity: Int,
                 overwriteFileCallback: String => Boolean,
                 displayAllParentheses: Boolean,
@@ -79,7 +79,7 @@ object TasksPipelines {
         .andThen(Mapper(List(_)))
         .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
         .andThen(new TypeChecker(er))
-        .andThen(new Desugarer(desugarOperators = desugarOperators))
+        .andThen(new Desugarer(desugarerMode))
     }
     val transfPipeline = if renameVars then noRenamePipeline.andThen(new Renamer()) else noRenamePipeline
     transfPipeline
@@ -93,7 +93,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer(desugarOperators = false, desugarStringEq = false, desugarPanic = true))
+      .andThen(new Desugarer(Desugarer.Mode.Verify))
       .andThen(new Renamer())
       .andThen(new PathsGenerator())
       .andThen(new PathsVerifier(Z3Solver(outputDirPath), timeoutSec, er, logger))
@@ -107,7 +107,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer(desugarOperators = true))
+      .andThen(new Desugarer(Desugarer.Mode.Compile))
       .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject))
   }
 

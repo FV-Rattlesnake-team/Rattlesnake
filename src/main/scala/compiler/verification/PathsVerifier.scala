@@ -189,11 +189,9 @@ final class PathsVerifier(
           reportUnsupported(StringType.str, sLit.getPosition)
         case VariableRef(name) =>
           qid(name)
-        case Call(VariableRef(name), args) =>
+        case Call(name, args) =>
           // TODO generate functions (predicates)
           FunctionApplication(qid(name), args.map(transformExpr))
-        case Call(_, _) =>
-          assert(false)
         case indexing@Indexing(_, _) =>
           reportUnsupported("array indexing", indexing.getPosition)
         case arrInit@ArrayInit(_, _) =>

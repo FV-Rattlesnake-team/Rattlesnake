@@ -28,6 +28,9 @@ class VerifierTests {
   @Test def maxTest(): Unit = runVerifTest("max", true)
   @Test def maxFailTest(): Unit = runVerifTest("maxFail", false)
 
+  @Test def fibonacciTest(): Unit = runVerifTest("fibonacci", true)
+  // TODO fibonacciFail
+
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())
     val path = s"$resDirPath/$filename.${FileExtensions.rattlesnake}"

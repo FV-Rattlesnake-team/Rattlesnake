@@ -3,7 +3,10 @@ package compiler.verification
 import compiler.{AnalysisContext, CompilerStep}
 import compiler.irs.Asts.Source
 import compiler.irs.Asts.*
+import compiler.prettyprinter.PrettyPrinter
 import compiler.verification.Path
+import compiler.verification.Path.PathElement
+
 import scala.collection.mutable.ListBuffer
 
 final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
@@ -31,9 +34,21 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
                              pathBuilders: List[Path.Builder]
                            )(implicit paths: ListBuffer[Path]): List[Path.Builder] = {
 
-    def pathBuildersUpdated: List[Path.Builder] = pathBuilders.map(_.addStat(statement))
-
-    statement match
+    statement match {
+      case varAssig@VarAssig(lhs, rhs) =>
+        generatePaths(List(lhs, rhs), pathBuilders)
+          .map(_.addPathElem(varAssig))
+      case localDef@LocalDef(_, _, rhs, _) =>
+        generatePaths(rhs, pathBuilders)
+          .map(_.addPathElem(localDef))
+      case assertion@Assertion(formulaExpr, _, isAssumed) =>
+        // no need to traverse the formula since it is not allowed to have side effects
+        if (!isAssumed) {
+          for pathB <- pathBuilders do {
+            paths.addOne(pathB.builtWith(formulaExpr, assertion.descr))
+          }
+        }
+        pathBuilders.map(_.addPathElem(assertion))
       case Sequence(stats, exprOpt) =>
         generatePaths(stats ++ exprOpt, pathBuilders)
       case Call(_, args) =>
@@ -54,34 +69,31 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         generatePaths(List(lhs, rhs), pathBuilders)
       case Select(lhs, _) =>
         generatePaths(lhs, pathBuilders)
-      case Ternary(cond, thenBr, elseBr) =>
-        generatePaths(List(cond, thenBr, elseBr), pathBuilders)
       case Cast(expr, _) =>
         generatePaths(expr, pathBuilders)
       case Block(stats) =>
         generatePaths(stats, pathBuilders)
-      case _: LocalDef =>
-        pathBuildersUpdated
-      case _: Assignment =>
-        pathBuildersUpdated
+      case Ternary(_, thenBr, elseBr) =>
+        val elsePathBuilders = pathBuilders.map(_.copied)
+        generatePaths(thenBr, pathBuilders) ++ generatePaths(elseBr, elsePathBuilders)
       case IfThenElse(_, thenBr, elseBrOpt) =>
         val elsePathBuilders = pathBuilders.map(_.copied)
         generatePaths(thenBr, pathBuilders) ++ elseBrOpt.map(generatePaths(_, elsePathBuilders)).getOrElse(Nil)
       case WhileLoop(_, body, _) =>
         generatePaths(body, List(new Path.Builder()))
         List(new Path.Builder())
-      case _: ReturnStat =>
-        pathBuilders
-      case _: PanicStat =>
-        pathBuildersUpdated
-      case Assertion(formulaExpr, descr, isAssumed) =>
-        if (!isAssumed) {
-          for pathB <- pathBuilders do {
-            paths.addOne(pathB.builtWith(formulaExpr, descr))
-          }
-        }
-        pathBuildersUpdated
-      case _: ForLoop => assert(false)
+      case ReturnStat(optVal) =>
+        generatePaths(optVal.toList, pathBuilders)
+      case panicStat@PanicStat(msg) =>
+        generatePaths(msg, pathBuilders).map(
+          _.addPathElem(Assertion(
+            BoolLit(false),
+            PrettyPrinter.prettyPrintStat(panicStat),
+            isAssumed = false
+          ).setPositionSp(panicStat.getPosition))
+        )
+      case _: (ForLoop | VarModif) => assert(false)
+    }
   }
 
   private def generatePaths(

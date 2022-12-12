@@ -93,18 +93,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             reportError(s"not found: '$name'", varRef.getPosition)
         }
 
-      case call@Call(callee, args) =>
-        callee match {
-          case varRef@VariableRef(name) =>
-            ctx.functions.get(name).map(_.sig) match {
-              case Some(funSig) =>
-                varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
-                checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
-                funSig.retType
+      case call@Call(calleeName, args) =>
+        ctx.functions.get(calleeName).map(_.sig) match {
+          case Some(funSig) =>
+            checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
+            funSig.retType
 
-              case None => reportError(s"not found: $name", call.getPosition)
-            }
-          case _ => reportError("syntax error, only functions can be called", call.getPosition)
+          case None => reportError(s"not found: $calleeName", call.getPosition)
         }
 
       case Indexing(indexed, arg) =>

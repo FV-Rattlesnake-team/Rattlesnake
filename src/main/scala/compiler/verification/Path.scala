@@ -3,26 +3,24 @@ package compiler.verification
 import compiler.irs.Asts
 import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.verification.Path.isControlFlowStat
+import compiler.verification.Path.{PathElement, isControlFlowStat}
 import lang.Types.PrimitiveType.BoolType
 
 import scala.collection.mutable.ListBuffer
 
-final case class Path(stats: List[Statement], formulaToProve: Expr, descr: String){
-  stats.foreach(stat => require(!isControlFlowStat(stat), PrettyPrinter.prettyPrintStat(stat)))
+final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr: String){
   require(formulaToProve.getType == BoolType)
-  
+
   def assertAllTypesAreSet(): Unit = {
-    for stat <- stats do {
-      stat match
-        case expr: Expr => expr.assertAllTypesAreSet()
-        case _ => ()
+    for pathElem <- pathElems do {
+      pathElem.assertAllTypesAreSet()
     }
+    formulaToProve.assertAllTypesAreSet()
   }
-  
+
   def toStrLines: List[String] = {
     val prettyPrinter = new PrettyPrinter()
-    val statsLines = stats.map(prettyPrinter.apply(_))
+    val statsLines = pathElems.map(prettyPrinter.apply(_))
     val line = "-".repeat(statsLines.maxBy(_.length).length)
     val formulaToProveLine = " ==> " ++ prettyPrinter.apply(formulaToProve) ++ s"  [$descr]"
     statsLines ++ List(line, formulaToProveLine)
@@ -36,13 +34,14 @@ final case class Path(stats: List[Statement], formulaToProve: Expr, descr: Strin
 
 object Path {
 
+  type PathElement = Assertion | LocalDef | VarAssig
+
   final class Builder() {
-    private val stats = ListBuffer.empty[Statement]
+    private val stats = ListBuffer.empty[PathElement]
     private val varsCtx = new VarsCtx()
 
-    def addStat(stat: Statement): Builder = {
-      require(!isControlFlowStat(stat), PrettyPrinter.prettyPrintStat(stat))
-      stats.addOne(removeVars(stat))
+    def addPathElem(elem: PathElement): Builder = {
+      stats.addOne(removeVars(elem))
       this
     }
 
@@ -59,6 +58,23 @@ object Path {
 
     private def removeVars(stats: List[Statement]): List[Statement] = {
       stats.map(removeVars)
+    }
+
+    private def removeVars(pathElement: PathElement): PathElement = {
+      pathElement match {
+        case LocalDef(localName, optType, rhs, _) =>
+          val transformedRhs = removeVars(rhs)
+          val newName = varsCtx.newNameFor(localName)
+          LocalDef(newName, optType, transformedRhs, isReassignable = false)
+        case VarAssig(VariableRef(name), rhs) =>
+          val transformedRhs = removeVars(rhs)
+          val newName = varsCtx.newNameFor(name)
+          LocalDef(newName, Some(rhs.getType), transformedRhs, isReassignable = false)
+        case VarAssig(lhs, rhs) =>
+          VarAssig(removeVars(lhs), removeVars(rhs))
+        case Assertion(formulaExpr, descr, isAssumed) =>
+          Assertion(removeVars(formulaExpr), descr, isAssumed)
+      }
     }
 
     private def removeVars(expr: Expr): Expr = {
@@ -99,20 +115,10 @@ object Path {
           removeVars(expr)
         case Block(stats) =>
           Block(removeVars(stats))
-        case LocalDef(localName, optType, rhs, _) =>
-          val transformedRhs = removeVars(rhs)
-          val newName = varsCtx.newNameFor(localName)
-          LocalDef(newName, optType, transformedRhs, isReassignable = false)
-        case VarAssig(VariableRef(name), rhs) =>
-          val transformedRhs = removeVars(rhs)
-          val newName = varsCtx.newNameFor(name)
-          LocalDef(newName, Some(rhs.getType), transformedRhs, isReassignable = false)
-        case VarAssig(lhs, rhs) =>
-          VarAssig(removeVars(lhs), removeVars(rhs))
+        case pathElement: PathElement =>
+          removeVars(pathElement)
         case PanicStat(msg) =>
           PanicStat(removeVars(msg))
-        case Assertion(formulaExpr, descr, isAssumed) =>
-          Assertion(removeVars(formulaExpr), descr, isAssumed)
         case _: (VarModif | IfThenElse | WhileLoop | ForLoop | ReturnStat) =>
           assert(false)
     }

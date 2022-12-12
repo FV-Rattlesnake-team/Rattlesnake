@@ -101,7 +101,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.add(name)
 
       case Call(callee, args) =>
-        addAst(callee)
+        pps.add(callee)
         addParenthList(args)
 
       case Indexing(indexed, arg) =>

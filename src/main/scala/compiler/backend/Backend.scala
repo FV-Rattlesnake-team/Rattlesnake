@@ -149,7 +149,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitVarInsn(opCode, localIdx)
 
       // typechecker ensures that callee is a VariableRef
-      case Call(VariableRef(name), args) => {
+      case Call(name, args) => {
 
         // will be used as a callback when generating built-in functions
         val generateArgs: () => Unit = { () =>

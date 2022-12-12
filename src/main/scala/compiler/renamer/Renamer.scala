@@ -39,10 +39,8 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
     val res: Expr = expr match {
       case literal: Literal => literal
-      case Call(funcRef: VariableRef, args) =>
-        Call(funcRef, args.map(ren))
-      case _: Call =>
-        assert(false)
+      case Call(callee, args) =>
+        Call(callee, args.map(ren))
       case Indexing(indexed, arg) =>
         Indexing(ren(indexed), ren(arg))
       case ArrayInit(elemType, size) =>

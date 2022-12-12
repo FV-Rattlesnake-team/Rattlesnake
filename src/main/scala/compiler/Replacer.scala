@@ -12,12 +12,12 @@ object Replacer {
   }
 
   private def replaceInExprImpl[E <: Expr](expr: E)(implicit replMap: Map[String, Expr]): E = {
-    val resExpr = expr match {
+    val resExpr: Expr = expr match {
       case _: Literal => expr
       case varRef@VariableRef(name) =>
         replMap.getOrElse(name, varRef)
       case Call(callee, args) =>
-        Call(replaceInExprImpl(callee), args.map(replaceInExprImpl))
+        Call(callee, args.map(replaceInExprImpl))
       case Indexing(indexed, arg) =>
         Indexing(replaceInExprImpl(indexed), replaceInExprImpl(arg))
       case ArrayInit(elemType, size) =>
@@ -44,7 +44,7 @@ object Replacer {
   }
 
   private def replaceInStat[S <: Statement](stat: S)(implicit replMap: Map[String, Expr]): S = {
-    val resStat = stat match {
+    val resStat: Statement = stat match {
       case expr: Expr =>
         replaceInExprImpl(expr)
       case Block(stats) =>
@@ -62,7 +62,7 @@ object Replacer {
       case ReturnStat(optVal) =>
         ReturnStat(optVal.map(replaceInExprImpl))
       case Assertion(formulaExpr, descr, isAssumed) =>
-        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPosition(stat.getPosition)
+        Assertion(replaceInExprImpl(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
       case panicStat: PanicStat =>
         panicStat
       case LocalDef(localName, optType, rhs, isReassignable) =>

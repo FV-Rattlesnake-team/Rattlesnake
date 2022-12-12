@@ -9,7 +9,7 @@ object FunctionalChecker {
     statement match
       case _: Asts.Literal => true
       case VariableRef(_) => true
-      case Call(VariableRef(name), args) => {
+      case Call(name, args) => {
         def bodyIsFullyFunctional = {
           analysisContext.functions.apply(name).optDef match {
             case None => false // built-in function
@@ -18,7 +18,6 @@ object FunctionalChecker {
         }
         args.forall(isPurelyFunctional) && bodyIsFullyFunctional
       }
-      case _: Call => assert(false)
       case Indexing(indexed, arg) =>
         isPurelyFunctional(indexed) && isPurelyFunctional(arg)
       case ArrayInit(_, size) =>

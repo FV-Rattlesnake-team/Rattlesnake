@@ -1,4 +1,5 @@
 import compiler.Errors.{ErrorReporter, errorsExitCode}
+import compiler.desugarer.Desugarer
 import compiler.io.SourceFile
 import compiler.parser.LL1Iterator
 import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines}
@@ -168,8 +169,9 @@ object Main {
     getUnvalArg("all-parenth", argsMap)
   }
 
-  private def getDesugarOperatorsArg(argsMap: MutArgsMap): Boolean = {
-    getUnvalArg("desugar-ops", argsMap)
+  private def getDesugarerModeArg(argsMap: MutArgsMap): Desugarer.Mode = {
+    if getUnvalArg("verif-like", argsMap) then Desugarer.Mode.Verify
+    else Desugarer.Mode.Compile
   }
 
   private def getRenameVarsArg(argsMap: MutArgsMap): Boolean = {
@@ -296,7 +298,7 @@ object Main {
       val desugarer = TasksPipelines.desugarer(
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
-        getDesugarOperatorsArg(argsMap),
+        getDesugarerModeArg(argsMap),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),
         getPrintAllParenthesesArg(argsMap),
@@ -375,8 +377,8 @@ object Main {
         |desugar: show the file after desugaring
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default same as input)
-        |       -desugar-ops: flag indicating that desugaring must be complete, i.e. that operators should be desugared
-        |                     (e.g.  `x && y`  is desugared to  `when x then y else false` )
+        |       -verify-like: flag indicating that desugaring must be done in the same way as before verification
+        |                     (by default it is done like before compilation)
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
