@@ -53,7 +53,7 @@ final class PathsVerifier(
                 case Failure(exception) =>
                   exception.getMessage
                 case Success(assigMap) => {
-                  val prefix = if assigMap.isEmpty then "" else "Counter-example: "
+                  val prefix = if assigMap.isEmpty then "" else "Possibly found a counter-example: "
                   assigMap
                     .filter((name, _) => isOriginalVarName(name))
                     .map((name, value) => s"$name = $value")
@@ -109,13 +109,7 @@ final class PathsVerifier(
         convertedFormulaToProve
       )
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
-      val comments = {
-        io.Source.fromString(s"target: $descr\n\n$path")
-          .getLines()
-          .map("; " ++ _)
-          .toList
-      }
-      solver.check(script, timeoutSec, comments, idx)
+      solver.check(script, timeoutSec, s"target: $descr\n\n$path", idx)
     }
   }
 

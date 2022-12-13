@@ -8,7 +8,7 @@ import scala.util.Try
 
 trait Solver {
   
-  def check(smtScript: Script, timeoutSec: Int, comments: List[String], idx: Int): Solver.Result
+  def check(smtScript: Script, timeoutSec: Int, comments: String, idx: Int): Solver.Result
 
 }
 

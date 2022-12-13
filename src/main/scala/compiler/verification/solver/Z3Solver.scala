@@ -28,7 +28,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     outputDir.resolve(s"z3input_$idx.smt")
   }
 
-  override def check(smtScript: Commands.Script, timeoutSec: Int, comments: List[String], idx: Int): Result = {
+  override def check(smtScript: Commands.Script, timeoutSec: Int, comments: String, idx: Int): Result = {
     val filepath = nextFilepath(idx)
     writeFile(smtScript, filepath, comments).map { _ =>
       val timeoutOption = s"-T:$timeoutSec"
@@ -42,7 +42,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     }
   }
 
-  private def writeFile(script: Script, tmpFilePath: java.nio.file.Path, comments: List[String]): Try[Unit] = {
+  private def writeFile(script: Script, tmpFilePath: java.nio.file.Path, comments: String): Try[Unit] = {
     val file = tmpFilePath.toFile
     file.createNewFile()
     Using(new FileWriter(file)) { writer =>
@@ -54,8 +54,8 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     }
   }
 
-  private def writeComments(lines: List[String], writer: FileWriter): Unit = {
-    for line <- lines do {
+  private def writeComments(comments: String, writer: FileWriter): Unit = {
+    for line <- io.Source.fromString(comments).getLines() do {
       writer.write(s"; $line\n")
     }
   }
