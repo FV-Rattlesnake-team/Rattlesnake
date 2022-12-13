@@ -85,14 +85,15 @@ final class Desugarer(mode: Desugarer.Mode)
       desugaredInitThenBr,
       Nil
     )
-    val newElseBrOpt = desugaredInitElseBrOpt.map { elseBr =>
+    val elseBrAssumption = assumption(not(desugaredCond), "else assumption")
+    val newElseBr = desugaredInitElseBrOpt.map { elseBr =>
       blockify(
-        List(assumption(not(desugaredCond), "else assumption")),
+        List(elseBrAssumption),
         elseBr,
         Nil
       )
-    }
-    IfThenElse(desugaredCond, newThenBr, newElseBrOpt)
+    }.getOrElse(elseBrAssumption)
+    IfThenElse(desugaredCond, newThenBr, Some(newElseBr))
   }
 
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
@@ -228,8 +229,14 @@ final class Desugarer(mode: Desugarer.Mode)
         }
       }
       case Ternary(cond, thenBr, elseBr) =>
-        // FIXME add assumptions
-        Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
+        val desugaredCond = desugar(cond)
+        val desugaredThenBr = desugar(thenBr)
+        val desugaredElseBr = desugar(elseBr)
+        Ternary(
+          desugaredCond,
+          sequencify(List(assumption(desugaredCond, "then assumption")), desugaredThenBr),
+          sequencify(List(assumption(not(desugaredCond), "else assumption")), desugaredElseBr)
+        )
       case Cast(expr, tpe) => Cast(desugar(expr), tpe)
       case Sequence(stats, exprOpt) => Sequence(stats.map(desugar), exprOpt.map(desugar))
     }

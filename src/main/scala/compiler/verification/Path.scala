@@ -8,7 +8,7 @@ import lang.Types.PrimitiveType.BoolType
 
 import scala.collection.mutable.ListBuffer
 
-final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr: String){
+final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr: String) {
   require(formulaToProve.getType == BoolType)
 
   def assertAllTypesAreSet(): Unit = {
@@ -18,16 +18,12 @@ final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr:
     formulaToProve.assertAllTypesAreSet()
   }
 
-  def toStrLines: List[String] = {
+  override def toString: String = {
     val prettyPrinter = new PrettyPrinter()
     val statsLines = pathElems.map(prettyPrinter.apply(_))
     val line = "-".repeat(statsLines.maxBy(_.length).length)
     val formulaToProveLine = " ==> " ++ prettyPrinter.apply(formulaToProve) ++ s"  [$descr]"
-    statsLines ++ List(line, formulaToProveLine)
-  }
-
-  override def toString: String = {
-    toStrLines.mkString("\n")
+    (statsLines ++ List(line, formulaToProveLine)).mkString("\n")
   }
 
 }

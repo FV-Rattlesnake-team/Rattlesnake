@@ -84,15 +84,7 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         List(new Path.Builder())
       case ReturnStat(optVal) =>
         generatePaths(optVal.toList, pathBuilders)
-      case panicStat@PanicStat(msg) =>
-        generatePaths(msg, pathBuilders).map(
-          _.addPathElem(Assertion(
-            BoolLit(false),
-            PrettyPrinter.prettyPrintStat(panicStat),
-            isAssumed = false
-          ).setPositionSp(panicStat.getPosition))
-        )
-      case _: (ForLoop | VarModif) => assert(false)
+      case _: (ForLoop | VarModif | PanicStat) => assert(false)
     }
   }
 

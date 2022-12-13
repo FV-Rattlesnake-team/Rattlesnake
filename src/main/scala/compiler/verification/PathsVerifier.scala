@@ -109,7 +109,12 @@ final class PathsVerifier(
         convertedFormulaToProve
       )
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
-      val comments = s"target: $descr" :: "" :: path.toStrLines
+      val comments = {
+        io.Source.fromString(s"target: $descr\n\n$path")
+          .getLines()
+          .map("; " ++ _)
+          .toList
+      }
       solver.check(script, timeoutSec, comments, idx)
     }
   }
