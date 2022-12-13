@@ -42,13 +42,13 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         generatePaths(rhs, pathBuilders)
           .map(_.addPathElem(localDef))
       case assertion@Assertion(formulaExpr, _, isAssumed) =>
-        // no need to traverse the formula since it is not allowed to have side effects
+        val newPathBuilders = generatePaths(formulaExpr, pathBuilders)
         if (!isAssumed) {
-          for pathB <- pathBuilders do {
+          for pathB <- newPathBuilders do {
             paths.addOne(pathB.builtWith(formulaExpr, assertion.descr))
           }
         }
-        pathBuilders.map(_.addPathElem(assertion))
+        newPathBuilders.map(_.addPathElem(assertion))
       case Sequence(stats, exprOpt) =>
         generatePaths(stats ++ exprOpt, pathBuilders)
       case Call(_, args) =>

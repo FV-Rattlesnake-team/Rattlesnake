@@ -59,6 +59,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           errorReporter.push(Err(TypeChecking, s"function arguments cannot be named '$Result'", funDef.getPosition))
         }
         checkPreAndPostcond(ctx, funDef, params, precond, postcond, expRetType)
+        checkNoRecInFormulas(funDef)
         VoidType
 
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
@@ -405,6 +406,25 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       for arg <- argsIter do {
         check(arg, ctx)
       }
+    }
+  }
+
+  private def checkNoRecInFormulas(funDef: FunDef): Unit = {
+    funDef.precond.foreach(checkNoRecInFormula(_, funDef))
+    funDef.postcond.foreach(checkNoRecInFormula(_, funDef))
+    funDef.collect {
+      case Assertion(formulaExpr, _, _) =>
+        checkNoRecInFormula(formulaExpr, funDef)
+      case whileLoop: WhileLoop =>
+        whileLoop.invariants.foreach(checkNoRecInFormula(_, funDef))
+      case forLoop: ForLoop =>
+        forLoop.invariants.foreach(checkNoRecInFormula(_, funDef))
+    }
+  }
+
+  private def checkNoRecInFormula(formula: Expr, enclosingFunc: FunDef): Unit = {
+    if (formula.collect { case Call(callee, _) if callee == enclosingFunc.funName => () }.nonEmpty){
+      reportError("recursive calls are forbidden in formulas", formula.getPosition)
     }
   }
 
