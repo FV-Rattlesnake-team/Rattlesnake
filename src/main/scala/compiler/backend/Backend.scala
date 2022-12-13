@@ -11,7 +11,7 @@ import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
-import lang.{BuiltInFunctions, TypeConversion, Types}
+import lang.{BuiltInFunctions, Operator, TypeConversion, Types}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -262,27 +262,12 @@ final class Backend[V <: ClassVisitor](
           mv.visitLabel(trueLabel)
           mv.visitInsn(Opcodes.ICONST_1)
           mv.visitLabel(endLabel)
-        } else if (operator == LessThan && tpe == IntType) {
-          /*
-           *   if_icmplt trueLabel  (goto trueLabel if lhs < rhs)
-           *   push false
-           *   goto endLabel
-           * trueLabel:
-           *   push true
-           * endLabel:
-           */
-          val trueLabel = new Label()
-          val endLabel = new Label()
-          mv.visitJumpInsn(Opcodes.IF_ICMPLT, trueLabel)
-          mv.visitInsn(Opcodes.ICONST_0)
-          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
-          mv.visitLabel(trueLabel)
-          mv.visitInsn(Opcodes.ICONST_1)
-          mv.visitLabel(endLabel)
-        } else if (operator == LessThan && tpe == DoubleType) {
+        } else if (isComparisonOperator(operator) && tpe == IntType) {
+          generateIntComparisonOperation(lhs, operator, rhs)
+        } else if ((operator == LessThan || operator == GreaterThan) && tpe == DoubleType) {
           /*
            *   dcmpg  (returns -1 if lhs < rhs)
-           *   if < 0 goto trueLabel
+           *   if <cmp> 0 goto trueLabel, where <cmp> = < or >
            *   push false
            *   goto endLabel
            * trueLabel:
@@ -292,7 +277,8 @@ final class Backend[V <: ClassVisitor](
           mv.visitInsn(Opcodes.DCMPG)
           val trueLabel = new Label()
           val endLabel = new Label()
-          mv.visitJumpInsn(Opcodes.IFLT, trueLabel)
+          val opcode = if operator == LessThan then Opcodes.IFLT else Opcodes.IFGT
+          mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
           mv.visitLabel(trueLabel)
@@ -473,6 +459,41 @@ final class Backend[V <: ClassVisitor](
     mv.visitLabel(falseLabel)
     elseBrOpt.foreach(generateCode(_, ctx))
     mv.visitLabel(endLabel)
+  }
+
+  private def generateIntComparisonOperation(lhs: Expr, operator: Operator, rhs: Expr)(implicit mv: MethodVisitor): Unit = {
+    /*
+     *   if_<cmp> trueLabel  (goto trueLabel if comparison is verified)
+     *   push false
+     *   goto endLabel
+     * trueLabel:
+     *   push true
+     * endLabel:
+     */
+    val opcode = operator match {
+      case Operator.LessThan => Opcodes.IF_ICMPLT
+      case Operator.LessOrEq => Opcodes.IF_ICMPLE
+      case Operator.GreaterThan => Opcodes.IF_ICMPGT
+      case Operator.GreaterOrEq => Opcodes.IF_ICMPGE
+      case _ => assert(false)
+    }
+    val trueLabel = new Label()
+    val endLabel = new Label()
+    mv.visitJumpInsn(opcode, trueLabel)
+    mv.visitInsn(Opcodes.ICONST_0)
+    mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+    mv.visitLabel(trueLabel)
+    mv.visitInsn(Opcodes.ICONST_1)
+    mv.visitLabel(endLabel)
+  }
+
+  private def isComparisonOperator(operator: Operator): Boolean = {
+    operator match
+      case Operator.LessThan => true
+      case Operator.LessOrEq => true
+      case Operator.GreaterThan => true
+      case Operator.GreaterOrEq => true
+      case _ => false
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

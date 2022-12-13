@@ -239,18 +239,15 @@ final class Desugarer(mode: Desugarer.Mode)
   private def desugarBinaryOp(binaryOp: BinaryOp)(implicit ctx: AnalysisContext): Expr = {
     val desugaredLhs = desugar(binaryOp.lhs)
     val desugaredRhs = desugar(binaryOp.rhs)
+    val isDoubleOp = binaryOp.lhs.getType == DoubleType || binaryOp.rhs.getType == DoubleType
     binaryOp.operator match {
 
       // x <= y ---> x <= y || x == y
-      case LessOrEq => desugar(BinaryOp(
-        BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
-        Or,
-        BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
-      ))
+      case LessOrEq if isDoubleOp =>
+        makeDoubleCompOrEq(desugaredLhs, LessThan, desugaredRhs)
 
-      // x > y ---> y < x  (and similar with >=)
-      case GreaterThan => desugar(BinaryOp(desugaredRhs, LessThan, desugaredLhs))
-      case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs))
+      case GreaterOrEq if isDoubleOp =>
+        makeDoubleCompOrEq(desugaredLhs, GreaterThan, desugaredRhs)
 
       // x != y ---> !(x == y)
       case Inequality =>
@@ -267,6 +264,24 @@ final class Desugarer(mode: Desugarer.Mode)
       // nothing to desugar at top-level, only perform recursive calls
       case _ => BinaryOp(desugaredLhs, binaryOp.operator, desugaredRhs)
     }
+  }
+
+  private def makeDoubleCompOrEq(desugaredLhs: Expr, strictCompOp: Operator, desugaredRhs: Expr)(implicit analysisContext: AnalysisContext) = {
+    require(strictCompOp == LessThan || strictCompOp == GreaterThan)
+    val lhsLocalName = uniqueIdGenerator.next()
+    val rhsLocalName = uniqueIdGenerator.next()
+    val lhsLocalRef = VariableRef(lhsLocalName).setType(DoubleType)
+    val rhsLocalRef = VariableRef(rhsLocalName).setType(DoubleType)
+    Sequence(List(
+      LocalDef(lhsLocalName, Some(DoubleType), desugaredLhs, isReassignable = false),
+      LocalDef(rhsLocalName, Some(DoubleType), desugaredRhs, isReassignable = false)
+    ), Some(
+      desugar(BinaryOp(
+        BinaryOp(lhsLocalRef, strictCompOp, rhsLocalRef).setType(BoolType),
+        Or,
+        BinaryOp(lhsLocalRef, Equality, rhsLocalRef).setType(BoolType)
+      ).setType(BoolType))
+    ))
   }
 
   private def desugarUnaryOp(unaryOp: UnaryOp)(implicit ctx: AnalysisContext): Expr = {
