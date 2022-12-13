@@ -59,17 +59,15 @@ object Path {
     private def removeVars(pathElement: PathElement): PathElement = {
       pathElement match {
         case LocalDef(localName, optType, rhs, _) =>
-          val transformedRhs = removeVars(rhs)
           val newName = varsCtx.newNameFor(localName)
-          LocalDef(newName, optType, transformedRhs, isReassignable = false)
+          LocalDef(newName, optType, rhs, isReassignable = false)
         case VarAssig(VariableRef(name), rhs) =>
-          val transformedRhs = removeVars(rhs)
           val newName = varsCtx.newNameFor(name)
-          LocalDef(newName, Some(rhs.getType), transformedRhs, isReassignable = false)
-        case VarAssig(lhs, rhs) =>
-          VarAssig(removeVars(lhs), removeVars(rhs))
-        case Assertion(formulaExpr, descr, isAssumed) =>
-          Assertion(removeVars(formulaExpr), descr, isAssumed)
+          LocalDef(newName, Some(rhs.getType), rhs, isReassignable = false)
+        case varAssig: VarAssig =>
+          varAssig
+        case assertion: Assertion =>
+          assertion
       }
     }
 

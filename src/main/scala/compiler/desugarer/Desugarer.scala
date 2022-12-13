@@ -52,7 +52,10 @@ final class Desugarer(mode: Desugarer.Mode)
       desugar(assumption(formula, PrettyPrinter.prettyPrintStat(formula)).setPositionSp(funDef.getPosition))
     ) ++ bodyStats
     val postcondWithRenaming = funDef.postcond.map(formula =>
-      desugar(assertion(formula, PrettyPrinter.prettyPrintStat(formula))).setPositionSp(funDef.getPosition)
+      desugar(assertion(
+        formula,
+        PrettyPrinter.prettyPrintStat(formula)
+      ))
     )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
       addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
@@ -99,7 +102,10 @@ final class Desugarer(mode: Desugarer.Mode)
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
     val desugaredCond = desugar(whileLoop.cond)
     val desugaredInvariants = whileLoop.invariants.map(invar =>
-      desugar(assertion(invar, PrettyPrinter.prettyPrintStat(invar)).setPositionSp(whileLoop.getPosition))
+      desugar(assertion(
+        invar,
+        "invariant " ++ PrettyPrinter.prettyPrintStat(invar)
+      ).setPositionSp(whileLoop.getPosition))
     )
     val invarAssumed = desugaredInvariants.map(_.copy(isAssumed = true))
     val whileBodyAssumptions = assumption(desugaredCond, "while body")
@@ -118,7 +124,9 @@ final class Desugarer(mode: Desugarer.Mode)
   }
 
   private def desugar(returnStat: ReturnStat)(implicit ctx: AnalysisContext): ReturnStat = {
-    ReturnStat(returnStat.optVal.map(desugar))
+    val newRetStat = ReturnStat(returnStat.optVal.map(desugar))
+    newRetStat.setPosition(returnStat.getPosition)
+    newRetStat
   }
 
   private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): Statement = {
@@ -162,7 +170,7 @@ final class Desugarer(mode: Desugarer.Mode)
             funInfo.optDef.get.params
               .map(_.paramName)
               .zip(argsLocalReferences)
-              .toMap + (Result.str -> resultLocalRef)   // resultLocalDef is ignored if return type is Void
+              .toMap + (Result.str -> resultLocalRef) // resultLocalDef is ignored if return type is Void
           }
           val retIsNoValType = funInfo.sig.retType.isNoValType
           val newCall = Call(calleeName, argsLocalReferences).setType(funInfo.sig.retType)
@@ -173,13 +181,17 @@ final class Desugarer(mode: Desugarer.Mode)
           val stats = {
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
-                desugar(assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintStat(formula))
-                  .setPositionSp(call.getPosition))
+                desugar(assertion(
+                  Replacer.replaceInExpr(desugar(formula), argsRenameMap),
+                  "precond  " ++ PrettyPrinter.prettyPrintStat(formula)
+                ).setPositionSp(call.getPosition))
               ) ++
               List(newCallLine) ++
               funInfo.postcond.map(formula =>
-                desugar(assumption(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintStat(formula))
-                  .setPositionSp(call.getPosition))
+                desugar(assumption(
+                  Replacer.replaceInExpr(desugar(formula), argsRenameMap),
+                  PrettyPrinter.prettyPrintStat(formula)
+                ).setPositionSp(call.getPosition))
               )
           }
           Sequence(stats, if retIsNoValType then None else Some(resultLocalRef))
@@ -374,13 +386,17 @@ final class Desugarer(mode: Desugarer.Mode)
         case retStat@ReturnStat(Some(retVal)) =>
           val uid = uniqueIdGenerator.next()
           val newLocalRef = VariableRef(uid).setType(retVal.getType)
-          val renamedAssertions = rawAssertions.map(assertion =>
-            Assertion(
-              formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
-              assertion.descr,
-              assertion.isAssumed
-            ).setPositionSp(retStat.getPosition)
-          )
+          val renamedAssertions = {
+            rawAssertions
+              .map(_.setPositionSp(retStat.getPosition))
+              .map(assertion =>
+                Assertion(
+                  formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
+                  "postcond " ++ assertion.descr,
+                  isAssumed = false
+                ).setPositionSp(retStat.getPosition)
+              )
+          }
           blockify(
             LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions,
             ReturnStat(Some(newLocalRef)),

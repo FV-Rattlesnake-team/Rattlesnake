@@ -54,11 +54,11 @@ final class PathsVerifier(
                 case Failure(exception) =>
                   exception.getMessage
                 case Success(assigMap) => {
-                  val prefix = if assigMap.isEmpty then "" else "Possibly found a counter-example: "
+                  val prefix = if assigMap.isEmpty then "" else "Could not be verified e.g. for: "
                   assigMap
                     .filter((name, _) => isOriginalVarName(name))
-                    .map((name, value) => s"$name = $value")
-                    .mkString(prefix, ", ", "")
+                    .map((name, value) => s"$name == $value")
+                    .mkString(prefix, " && ", "")
                 }
             }
             genPrintableReport("FAILURE", assigStr)
@@ -189,9 +189,10 @@ final class PathsVerifier(
           reportUnsupported(StringType.str, sLit.getPosition)
         case VariableRef(name) =>
           qid(name)
-        case Call(name, args) =>
-          // TODO generate functions (predicates)
-          FunctionApplication(qid(name), args.map(transformExpr))
+        case call: Call =>
+          val newVarName = nextNameForNewVar()
+          additVarsBuffer.addOne(newVarName -> call.getType)
+          qid(newVarName)  // variable with no constraint, since there is no postcondition
         case indexing@Indexing(_, _) =>
           reportUnsupported("array indexing", indexing.getPosition)
         case arrInit@ArrayInit(_, _) =>

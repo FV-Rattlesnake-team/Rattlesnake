@@ -48,7 +48,7 @@ object FunctionalChecker {
       case ForLoop(_, _, _, _, _) => false
       case ReturnStat(_) => false
       case PanicStat(_) => false
-      case Assertion(_, _, _) => true
+      case Assertion(_, _, _) => false
   }
 
   def isPurelyFunctional(funDef: FunDef)(implicit analysisContext: AnalysisContext): Boolean = {
