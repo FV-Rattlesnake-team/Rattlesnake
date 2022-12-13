@@ -290,7 +290,12 @@ final class Desugarer(mode: Desugarer.Mode)
     operator match {
       case Minus if operand.getType == IntType => BinaryOp(IntLit(0), Minus, desugaredOperand)
       case Minus if operand.getType == DoubleType => BinaryOp(DoubleLit(0.0), Minus, desugaredOperand)
-      case ExclamationMark => Ternary(desugaredOperand, BoolLit(false), BoolLit(true))
+      case ExclamationMark => {
+        desugaredOperand match {
+          case UnaryOp(ExclamationMark, subOperand) => subOperand
+          case _ => BinaryOp(desugaredOperand, Equality, BoolLit(false))
+        }
+      }
       case _ => UnaryOp(operator, desugaredOperand)
     }
   }
