@@ -15,17 +15,18 @@ import scala.util.{Failure, Success, Try, Using}
 final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
   private val z3ExecName = "z3"
 
-  {
+  private def nextFilepath(idx: Int) = {
+    outputDir.resolve(s"z3input_$idx.smt")
+  }
+
+
+  override def initialize(): Unit = {
     val dir = outputDir.toFile
     if (dir.exists()) {
       clearDir()
     } else {
       dir.mkdir()
     }
-  }
-
-  private def nextFilepath(idx: Int) = {
-    outputDir.resolve(s"z3input_$idx.smt")
   }
 
   override def check(smtScript: Commands.Script, timeoutSec: Int, comments: String, idx: Int): Result = {

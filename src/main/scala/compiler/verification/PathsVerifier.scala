@@ -36,6 +36,7 @@ final class PathsVerifier(
   }
 
   override def apply(paths: List[Path]): Boolean = {
+    solver.initialize()
     var correct = true
     for ((path, idx) <- paths.zipWithIndex) do {
       val base1Idx = idx + 1
