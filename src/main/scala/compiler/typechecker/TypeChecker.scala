@@ -290,7 +290,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         checkControlFlowCond(cond, newCtx)
         stepStats.foreach(check(_, newCtx))
         check(body, newCtx)
-        checkVerificationFormulas(invariants.map((_, forLoop.getPosition)), ctx)
+        checkVerificationFormulas(invariants.map((_, forLoop.getPosition)), newCtx)
         VoidType
 
       case ReturnStat(valueOpt) =>
