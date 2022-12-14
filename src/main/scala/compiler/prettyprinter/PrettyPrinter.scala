@@ -223,6 +223,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         if (invariants.nonEmpty){
           pps.newLine()
         }
+        pps.addSpace()
         addAst(body)
 
       case ForLoop(initStats, cond, stepStats, body, invariants) =>
