@@ -47,21 +47,9 @@ final class PathsVerifier(
 
       logger(
         verify(path, base1Idx, errorReporter) match
-          case Solver.Sat(assig) => {
+          case Solver.Sat(varsAssigDescr) => {
             correct = false
-            val assigStr = {
-              assig match
-                case Failure(exception) =>
-                  exception.getMessage
-                case Success(assigMap) => {
-                  val prefix = if assigMap.isEmpty then "" else "Could not be verified e.g. for: "
-                  assigMap
-                    .filter((name, _) => isOriginalVarName(name))
-                    .map((name, value) => s"$name == $value")
-                    .mkString(prefix, " && ", "")
-                }
-            }
-            genPrintableReport("FAILURE", assigStr)
+            genPrintableReport("FAILURE", varsAssigDescr)
           }
           case Solver.Unsat =>
             genPrintableReport("success")
@@ -332,11 +320,6 @@ final class PathsVerifier(
     errorReporter.push(Err(Verification, "Not supported: " ++ msg, posOpt))
     errorFlag.set()
     null
-  }
-
-  private def isOriginalVarName(name: String): Boolean = {
-    require(name.nonEmpty)
-    name.head.isLetter && name.tail.forall(char => char.isLetterOrDigit || char == '_')
   }
 
 }

@@ -83,7 +83,18 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
         }
 
         reader.readLine() match {
-          case "sat" => Sat(Z3OutputParser.parse(read(Nil)))
+          case "sat" =>
+            Z3OutputParser.parse(read(Nil)) match {
+              case Failure(exception) => Sat(" error: " ++ exception.getMessage)
+              case Success(assigMap) =>
+                val prefix = if assigMap.isEmpty then "" else "Could not be verified e.g. for: "
+                Sat(
+                  assigMap
+                    .filter((name, _) => isOriginalVarName(name))
+                    .map((name, value) => s"$name == $value")
+                    .mkString(prefix, " && ", "")
+                )
+            }
           case "unsat" => Unsat
           case "timeout" => Timeout(timeoutSec)
           case s => Error(s)
@@ -96,6 +107,11 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
       case Failure(exception) => Error("Internal error: " ++ exception.getMessage)
       case Success(result) => result
     }
+  }
+
+  private def isOriginalVarName(name: String): Boolean = {
+    require(name.nonEmpty)
+    name.head.isLetter && name.tail.forall(char => char.isLetterOrDigit || char == '_')
   }
 
 }

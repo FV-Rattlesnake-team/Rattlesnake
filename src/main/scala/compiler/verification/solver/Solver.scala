@@ -16,7 +16,7 @@ trait Solver {
 object Solver {
 
   sealed trait Result
-  final case class Sat(varsAssigOpt: Try[Map[String, String]]) extends Result
+  final case class Sat(varsAssigDescr: String) extends Result
   case object Unsat extends Result
   final case class Timeout(timeoutSec: Int) extends Result
   final case class Error(msg: String) extends Result
