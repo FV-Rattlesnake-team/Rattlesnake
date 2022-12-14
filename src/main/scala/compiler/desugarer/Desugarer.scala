@@ -135,7 +135,7 @@ final class Desugarer(mode: Desugarer.Mode)
   }
 
   private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion = {
-    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed).setPositionSp(assertion.getPosition)
+    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed)
   }
 
   private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
