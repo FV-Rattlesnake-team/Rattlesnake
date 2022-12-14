@@ -170,8 +170,8 @@ object Main {
   }
 
   private def getDesugarerModeArg(argsMap: MutArgsMap): Desugarer.Mode = {
-    if getUnvalArg("verif-like", argsMap) then Desugarer.Mode.Verify
-    else Desugarer.Mode.Compile
+    if getUnvalArg("compile-like", argsMap) then Desugarer.Mode.Compile
+    else Desugarer.Mode.Verify
   }
 
   private def getRenameVarsArg(argsMap: MutArgsMap): Boolean = {
@@ -377,8 +377,8 @@ object Main {
         |desugar: show the file after desugaring
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default same as input)
-        |       -verify-like: flag indicating that desugaring must be done in the same way as before verification
-        |                     (by default it is done like before compilation)
+        |       -compile-like: flag indicating that desugaring must be done in the same way as before compilation
+        |                      (by default it is done like before verification)
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
