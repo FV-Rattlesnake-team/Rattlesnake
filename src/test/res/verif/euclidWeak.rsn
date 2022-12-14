@@ -12,3 +12,8 @@ fn gcd(x: Int, y: Int) -> Int require x > 0 require y > 0 {
     return a
 } ensure result > 0
 
+fn main(args: arr String){
+    print(intToString(gcd(360, 105)))
+}
+
+
