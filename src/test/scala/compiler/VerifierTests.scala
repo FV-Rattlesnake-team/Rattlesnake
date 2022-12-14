@@ -30,6 +30,7 @@ class VerifierTests {
   @Test def fibonacci1Test(): Unit = runVerifTest("fibonacci1", true)
   @Test def fibonacci2Test(): Unit = runVerifTest("fibonacci2", true)
   @Test def fibonacci3Test(): Unit = runVerifTest("fibonacci3", true)
+  @Test def fibonacci4Test(): Unit = runVerifTest("fibonacci4", true)
   @Test def fibonacciFailTest(): Unit = runVerifTest("fibonacciFail", false)
   @Test def prodTest(): Unit = runVerifTest("prod", true)
   @Test def prodFailTest(): Unit = runVerifTest("prodFail", false)
