@@ -105,7 +105,7 @@ final class Desugarer(mode: Desugarer.Mode)
       desugar(assertion(
         invar,
         "invariant " ++ PrettyPrinter.prettyPrintStat(invar)
-      ).setPositionSp(whileLoop.getPosition))
+      ).setPositionSp(invar.getPosition))
     )
     val invarAssumed = desugaredInvariants.map(_.copy(isAssumed = true))
     val whileBodyAssumptions = assumption(desugaredCond, "while body")
