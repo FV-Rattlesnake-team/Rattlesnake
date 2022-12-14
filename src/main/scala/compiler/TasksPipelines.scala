@@ -88,7 +88,7 @@ object TasksPipelines {
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
   }
 
-  def verifier(outputDirPath: Path, timeoutSec: Int, logger: String => Unit): CompilerStep[List[SourceCodeProvider], Boolean] = {
+  def verifier(outputDirPath: Path, timeoutSec: Int, logger: String => Unit): CompilerStep[List[SourceCodeProvider], PathsVerifier.Score] = {
     val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))

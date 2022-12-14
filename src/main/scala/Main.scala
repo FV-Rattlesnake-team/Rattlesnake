@@ -318,11 +318,11 @@ object Main {
         logger = println
       )
       reportUnknownArgsIfAny(argsMap)
-      val correct = verifier.apply(sources)
-      if (correct) {
-        println("Program verification succeeded")
+      val score = verifier.apply(sources)
+      if (score.allPassed) {
+        println(s"Program verification succeeded ($score)")
       } else {
-        println("Program verification FAILED")
+        println(s"Program verification FAILED ($score)")
       }
     }
   }

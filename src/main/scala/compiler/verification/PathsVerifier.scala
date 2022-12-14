@@ -5,6 +5,7 @@ import compiler.{CompilerStep, Position}
 import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts
 import compiler.irs.Asts.*
+import compiler.verification.PathsVerifier.Score
 import compiler.verification.solver.Solver
 import compiler.verification.solver.Solver.*
 import lang.Operator.*
@@ -27,7 +28,7 @@ final class PathsVerifier(
                            timeoutSec: Int,
                            errorReporter: ErrorReporter,
                            logger: String => Unit
-                         ) extends CompilerStep[List[Path], Boolean] {
+                         ) extends CompilerStep[List[Path], Score] {
 
   private val atomicIntUid = new AtomicInteger(0)
 
@@ -35,9 +36,9 @@ final class PathsVerifier(
     "%" ++ atomicIntUid.incrementAndGet().toString
   }
 
-  override def apply(paths: List[Path]): Boolean = {
+  override def apply(paths: List[Path]): Score = {
     solver.initialize()
-    var correct = true
+    var correctCnt = 0
     for ((path, idx) <- paths.zipWithIndex) do {
       val base1Idx = idx + 1
 
@@ -48,23 +49,21 @@ final class PathsVerifier(
       logger(
         verify(path, base1Idx, errorReporter) match
           case Solver.Sat(varsAssigDescr) => {
-            correct = false
             genPrintableReport("FAILURE", varsAssigDescr)
           }
           case Solver.Unsat =>
+            correctCnt += 1
             genPrintableReport("success")
           case Solver.Timeout(timeoutSec) => {
-            correct = false
             genPrintableReport(s"TIMEOUT ($timeoutSec s)")
           }
           case Error(msg) => {
-            correct = false
             genPrintableReport("ERROR: " ++ msg)
           }
       )
     }
     errorReporter.displayAndTerminateIfErrors()
-    correct
+    Score(correctCnt, paths.size)
   }
 
   private final class ErrorFlag {
@@ -322,4 +321,16 @@ final class PathsVerifier(
     null
   }
 
+}
+
+object PathsVerifier {
+  
+  final case class Score(passed: Int, total: Int){
+    require(passed <= total)
+    
+    def allPassed: Boolean = (passed == total)
+
+    override def toString: String = s"$passed/$total"
+  }
+  
 }
