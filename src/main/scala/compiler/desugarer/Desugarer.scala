@@ -2,7 +2,7 @@ package compiler.desugarer
 
 import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject, Replacer, UniqueIdGenerator}
+import compiler.{AnalysisContext, CompilerStep, FunctionalChecker, FunctionsToInject, Replacer, UniqueIdGenerator}
 import lang.Operator.*
 import lang.{Operator, Operators}
 import lang.Types.PrimitiveType.*
@@ -178,6 +178,7 @@ final class Desugarer(mode: Desugarer.Mode)
             if retIsNoValType then newCall
             else LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)
           }
+          val allPostcond = funInfo.postcond ++ funInfo.optDef.flatMap(generateTrivialPostcond)
           val stats = {
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
@@ -187,7 +188,7 @@ final class Desugarer(mode: Desugarer.Mode)
                 ).setPositionSp(call.getPosition))
               ) ++
               List(newCallLine) ++
-              funInfo.postcond.map(formula =>
+              allPostcond.map(formula =>
                 desugar(assumption(
                   Replacer.replaceInExpr(desugar(formula), argsRenameMap),
                   PrettyPrinter.prettyPrintStat(formula)
@@ -413,7 +414,21 @@ final class Desugarer(mode: Desugarer.Mode)
     }
   }
 
-  private def not(expr: Expr)(implicit analysisContext: AnalysisContext): Expr = {
+  private def generateTrivialPostcond(funDef: FunDef)(implicit analysisContext: AnalysisContext): Option[Expr] = {
+    funDef.body match
+      case Block(List(ReturnStat(Some(expr))))
+        if expr.collect { case Call(callee, _) if callee == funDef.funName => () }.isEmpty
+          && FunctionalChecker.isPurelyFunctional(expr)
+      =>
+        Some(BinaryOp(
+          VariableRef(Result.str).setType(funDef.signature.retType),
+          Equality,
+          expr
+        ).setType(BoolType))
+      case _ => None
+  }
+
+  private def not(expr: Expr): Expr = {
     UnaryOp(ExclamationMark, expr).setType(BoolType)
   }
 

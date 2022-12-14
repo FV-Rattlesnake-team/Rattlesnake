@@ -5,4 +5,4 @@ fn prod(x: Int, y: Int) -> Int require x >= 1 && y >= 1 {
 
 fn max(a: Int, b: Int) -> Int {
     return when a < b then b else a
-} ensure result >= a && result >= b && (result == a || result == b)
+}

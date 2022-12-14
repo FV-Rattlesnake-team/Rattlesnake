@@ -6,41 +6,46 @@ import Asts.*
 object FunctionalChecker {
 
   def isPurelyFunctional(statement: Statement)(implicit analysisContext: AnalysisContext): Boolean = {
+    isPurelyFunctionalImpl(statement)(None, analysisContext)
+  }
+
+  private def isPurelyFunctionalImpl(statement: Statement)(implicit funNotToCheck: Option[String], analysisContext: AnalysisContext): Boolean = {
     statement match
       case _: Asts.Literal => true
       case VariableRef(_) => true
+      case Call(name, _) if funNotToCheck.contains(name) => true
       case Call(name, args) => {
         def bodyIsFullyFunctional = {
           analysisContext.functions.apply(name).optDef match {
             case None => false // built-in function
-            case Some(funDef) => isPurelyFunctional(funDef)
+            case Some(funDef) => isPurelyFunctionalImpl(funDef, analysisContext)
           }
         }
-        args.forall(isPurelyFunctional) && bodyIsFullyFunctional
+        args.forall(isPurelyFunctionalImpl) && bodyIsFullyFunctional
       }
       case Indexing(indexed, arg) =>
-        isPurelyFunctional(indexed) && isPurelyFunctional(arg)
+        isPurelyFunctionalImpl(indexed) && isPurelyFunctionalImpl(arg)
       case ArrayInit(_, size) =>
-        isPurelyFunctional(size)
+        isPurelyFunctionalImpl(size)
       case FilledArrayInit(arrayElems) =>
-        arrayElems.forall(isPurelyFunctional)
+        arrayElems.forall(isPurelyFunctionalImpl)
       case StructInit(_, args) =>
-        args.forall(isPurelyFunctional)
+        args.forall(isPurelyFunctionalImpl)
       case UnaryOp(_, operand) =>
-        isPurelyFunctional(operand)
+        isPurelyFunctionalImpl(operand)
       case BinaryOp(lhs, _, rhs) =>
-        isPurelyFunctional(lhs) && isPurelyFunctional(rhs)
+        isPurelyFunctionalImpl(lhs) && isPurelyFunctionalImpl(rhs)
       case Select(lhs, _) =>
-        isPurelyFunctional(lhs)
+        isPurelyFunctionalImpl(lhs)
       case Ternary(cond, thenBr, elseBr) =>
-        isPurelyFunctional(cond) && isPurelyFunctional(thenBr) && isPurelyFunctional(elseBr)
+        isPurelyFunctionalImpl(cond) && isPurelyFunctionalImpl(thenBr) && isPurelyFunctionalImpl(elseBr)
       case Cast(expr, _) =>
-        isPurelyFunctional(expr)
+        isPurelyFunctionalImpl(expr)
       case Sequence(stats, exprOpt) =>
-        stats.forall(isPurelyFunctional) && exprOpt.exists(isPurelyFunctional)
+        stats.forall(isPurelyFunctionalImpl) && exprOpt.exists(isPurelyFunctionalImpl)
       case Block(_) => false
       case LocalDef(_, _, rhs, isReassignable) =>
-        !isReassignable && isPurelyFunctional(rhs)
+        !isReassignable && isPurelyFunctionalImpl(rhs)
       case VarAssig(_, _) => false
       case VarModif(_, _, _) => false
       case IfThenElse(_, _, _) => false
@@ -52,12 +57,21 @@ object FunctionalChecker {
   }
 
   def isPurelyFunctional(funDef: FunDef)(implicit analysisContext: AnalysisContext): Boolean = {
+    isPurelyFunctionalImpl(funDef, analysisContext)
+  }
+
+  private def isPurelyFunctionalImpl(funDef: FunDef, analysisContext: AnalysisContext): Boolean = {
+    implicit val newFunNotToCheck: Option[String] = Some(funDef.funName)
+    implicit val _analysisContext: AnalysisContext = analysisContext
+
     val stats = funDef.body.stats
-    val initCond = stats.init.forall(stat => stat.isInstanceOf[LocalDef] && isPurelyFunctional(stat))
+    val initCond = stats.init.forall(stat => stat.isInstanceOf[LocalDef] && isPurelyFunctionalImpl(stat))
+
     def lastCond = stats.last match {
-      case ReturnStat(Some(retVal)) if isPurelyFunctional(retVal) => true
+      case ReturnStat(Some(retVal)) if isPurelyFunctionalImpl(retVal) => true
       case _ => false
     }
+
     initCond && lastCond
   }
 
