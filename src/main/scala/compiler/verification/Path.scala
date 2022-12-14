@@ -5,6 +5,7 @@ import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
 import compiler.verification.Path.{PathElement, isControlFlowStat}
 import lang.Types.PrimitiveType.BoolType
+import compiler.Replacer.replaceInExpr
 
 import scala.collection.mutable.ListBuffer
 
@@ -49,7 +50,8 @@ object Path {
 
     def builtWith(formulaToProve: Expr, descr: String): Path = {
       require(formulaToProve.getType == BoolType)
-      Path(stats.toList, formulaToProve, descr)
+      val formulaAfterRenaming = replaceInExpr(formulaToProve, varsCtx.currentRenameMapSnapshot)
+      Path(stats.toList, formulaAfterRenaming, descr)
     }
 
     private def removeVars(stats: List[Statement]): List[Statement] = {
@@ -59,15 +61,24 @@ object Path {
     private def removeVars(pathElement: PathElement): PathElement = {
       pathElement match {
         case LocalDef(localName, optType, rhs, _) =>
+          val newRhs = replaceInExpr(rhs, varsCtx.currRenameMapView)
           val newName = varsCtx.newNameFor(localName)
-          LocalDef(newName, optType, rhs, isReassignable = false)
+          LocalDef(newName, optType, newRhs, isReassignable = false)
         case VarAssig(VariableRef(name), rhs) =>
+          val newRhs = replaceInExpr(rhs, varsCtx.currRenameMapView)
           val newName = varsCtx.newNameFor(name)
-          LocalDef(newName, Some(rhs.getType), rhs, isReassignable = false)
-        case varAssig: VarAssig =>
-          varAssig
-        case assertion: Assertion =>
-          assertion
+          LocalDef(newName, Some(rhs.getType), newRhs, isReassignable = false)
+        case VarAssig(lhs, rhs) =>
+          val renMap = varsCtx.currRenameMapView
+          val newLhs = replaceInExpr(lhs, renMap)
+          val newRhs = replaceInExpr(rhs, renMap)
+          VarAssig(newLhs, newRhs)
+        case assertion@Assertion(formulaExpr, _descr, isAssumed) =>
+          Assertion(
+            replaceInExpr(formulaExpr, varsCtx.currRenameMapView),
+            _descr,
+            isAssumed
+          ).setPositionSp(assertion.getPosition)
       }
     }
 

@@ -16,8 +16,14 @@ object Z3OutputParser {
       Failure(new Exception(s"unable to parse z3 response"))
     }
 
-    def parseVariableLine(line: String): String = {
-      line.trim.replace("(define-fun ", "").takeWhile(!_.isWhitespace)
+    def parseVariableLine(line: String): Option[String] = {
+      val (toParse, rem) = {
+        line
+          .trim
+          .replace("(define-fun ", "")
+          .span(!_.isWhitespace)
+      }
+      if rem.trim.startsWith("()") then Some(toParse) else None
     }
 
     def parseValueLine(line: String): String = {
@@ -29,19 +35,26 @@ object Z3OutputParser {
       val assig = mutable.Map.empty[String, String]
       linesIter.next()  // drop first line
       while (linesIter.hasNext){
-        val curr = linesIter.next()
+        val currLine = linesIter.next()
         if (!linesIter.hasNext){
           return scala.util.Success(assig.toMap)
         }
-        val variable = parseVariableLine(curr)
-        val value = if (linesIter.hasNext){
-          parseValueLine(linesIter.next())
-        } else {
-          return fail
+        val variableOpt = parseVariableLine(currLine)
+        // get value even if variableOpt is None, to move the iterator
+        val value = {
+          if (linesIter.hasNext){
+            parseValueLine(linesIter.next())
+          } else {
+            return fail
+          }
         }
-        assig.put(variable, value)
+        variableOpt match {
+          case Some(variable) =>
+            assig.put(variable, value)
+          case None => ()
+        }
       }
-      assert(false)
+      scala.util.Success(assig.toMap)
     } else {
       fail
     }

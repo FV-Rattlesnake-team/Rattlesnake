@@ -6,7 +6,7 @@ import smtlib.trees.Commands.{CheckSat, GetModel, Script}
 import smtlib.trees.{Commands, Terms}
 import util.IO
 
-import java.io.{BufferedReader, FileWriter, InputStreamReader}
+import java.io.{BufferedReader, FileWriter, IOException, InputStreamReader}
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
@@ -34,7 +34,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     writeFile(smtScript, filepath, comments).map { _ =>
       val timeoutOption = s"-T:$timeoutSec"
       runCommand(List(z3ExecName, timeoutOption, filepath.toString), timeoutSec)
-    }.recover(exc => Error(exc.getMessage)).get
+    }.recover(exc => Error("Internal error: " ++ exc.getMessage)).get
   }
 
   private def clearDir(): Unit = {
@@ -68,27 +68,32 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     val runtime = Runtime.getRuntime
     val command = cmd.mkString(" ")
     val process = runtime.exec(command)
-    val tryRes = Using(new BufferedReader(new InputStreamReader(process.getInputStream))) { reader =>
 
-      @tailrec def read(prevLinesRev: List[String]): List[String] = {
-        val line = reader.readLine()
-        if (line != null) {
-          read(line :: prevLinesRev)
-        } else {
-          prevLinesRev.reverse
+    val tryRes = {
+
+      Using(new BufferedReader(new InputStreamReader(process.getInputStream))) { reader =>
+
+        @tailrec def read(prevLinesRev: List[String]): List[String] = {
+          val line = reader.readLine()
+          if (line != null) {
+            read(line :: prevLinesRev)
+          } else {
+            prevLinesRev.reverse
+          }
         }
-      }
 
-      reader.readLine() match {
-        case "sat" => Sat(Z3OutputParser.parse(read(Nil)))
-        case "unsat" => Unsat
-        case "timeout" => Timeout(timeoutSec)
-        case s => Error(s)
-      }
+        reader.readLine() match {
+          case "sat" => Sat(Z3OutputParser.parse(read(Nil)))
+          case "unsat" => Unsat
+          case "timeout" => Timeout(timeoutSec)
+          case s => Error(s)
+        }
 
+      }
     }
+
     tryRes match {
-      case Failure(exception) => Error(exception.getMessage)
+      case Failure(exception) => Error("Internal error: " ++ exception.getMessage)
       case Success(result) => result
     }
   }
