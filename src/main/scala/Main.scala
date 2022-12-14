@@ -322,7 +322,7 @@ object Main {
       if (correct) {
         println("Program verification succeeded")
       } else {
-        println("Program verification failed")
+        println("Program verification FAILED")
       }
     }
   }

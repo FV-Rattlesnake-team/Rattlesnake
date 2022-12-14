@@ -104,9 +104,15 @@ final class PathsVerifier(
         (vars ++ additionalVarsBuffer)
           .map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
       }
+      val allAssumpt = assumedFormulas ++ additionalFormulasBuffer
+      val assumptFormula = {
+        allAssumpt match
+          case Nil => True()
+          case single :: Nil => single
+          case _ => Core.And(allAssumpt)
+      }
       val implication = Implies(
-        (assumedFormulas ++ additionalFormulasBuffer)
-          .foldLeft(True())(Core.And(_, _)),
+        assumptFormula,
         convertedFormulaToProve
       )
       val script = Script(varsDecls :+ AssertCmd(Not(implication)))
@@ -153,8 +159,8 @@ final class PathsVerifier(
       case Ternary(cond, thenBr, elseBr) =>
         generateFormulas(cond) ++ generateFormulas(thenBr) ++ generateFormulas(elseBr)
       case _: Cast => Nil
-      case Sequence(stats, exprOpt) =>
-        stats.flatMap(generateFormulas) ++ exprOpt.flatMap(generateFormulas)
+      case Sequence(_, exprOpt) =>
+        exprOpt.flatMap(generateFormulas).toList
       case Block(stats) =>
         stats.flatMap(generateFormulas)
       case LocalDef(localName, _, rhs, _) =>

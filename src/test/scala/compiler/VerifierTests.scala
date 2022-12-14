@@ -28,8 +28,13 @@ class VerifierTests {
   @Test def maxTest(): Unit = runVerifTest("max", true)
   @Test def maxFailTest(): Unit = runVerifTest("maxFail", false)
 
-  @Test def fibonacciTest(): Unit = runVerifTest("fibonacci", true)
-  // TODO fibonacciFail
+  @Test def fibonacci1Test(): Unit = runVerifTest("fibonacci1", true)
+  @Test def fibonacci2Test(): Unit = runVerifTest("fibonacci2", true)
+  @Test def fibonacci3Test(): Unit = runVerifTest("fibonacci3", true)
+  @Test def fibonacciFailTest(): Unit = runVerifTest("fibonacciFail", false)
+
+  @Test def prodTest(): Unit = runVerifTest("prod", true)
+  @Test def prodFailTest(): Unit = runVerifTest("prodFail", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())

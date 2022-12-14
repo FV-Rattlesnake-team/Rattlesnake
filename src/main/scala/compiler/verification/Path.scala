@@ -21,7 +21,7 @@ final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr:
   override def toString: String = {
     val prettyPrinter = new PrettyPrinter()
     val statsLines = pathElems.map(prettyPrinter.apply(_))
-    val line = "-".repeat(statsLines.maxBy(_.length).length)
+    val line = "-".repeat(if statsLines.isEmpty then 20 else statsLines.maxBy(_.length).length)
     val formulaToProveLine = " ==> " ++ prettyPrinter.apply(formulaToProve) ++ s"  [$descr]"
     (statsLines ++ List(line, formulaToProveLine)).mkString("\n")
   }
