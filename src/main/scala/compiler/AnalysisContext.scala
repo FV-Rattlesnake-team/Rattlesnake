@@ -57,7 +57,7 @@ object AnalysisContext {
       } else {
         val fieldsMap = new mutable.LinkedHashMap[String, Type]()
         for param <- structDef.fields do {
-          if (param.tpe == VoidType || param.tpe == NothingType) {
+          if (param.tpe.isNoValType) {
             errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))
           } else if (fieldsMap.contains(param.paramName)) {
             errorReporter.push(Err(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))

@@ -23,6 +23,11 @@ final case class Position(srcCodeProviderName: String, line: Int, col: Int) exte
   }
 
   override def toString: String = s"$srcCodeProviderName:$line:$col"
+  
+  def toStringSimpleFilename: String = {
+    val simpleFilename = srcCodeProviderName.split("/").last
+    s"$simpleFilename:$line:$col"
+  }
 
 }
 

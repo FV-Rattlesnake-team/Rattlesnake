@@ -11,7 +11,7 @@ import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
-import lang.{BuiltInFunctions, TypeConversion, Types}
+import lang.{BuiltInFunctions, Operator, TypeConversion, Types}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -129,7 +129,7 @@ final class Backend[V <: ClassVisitor](
     ast match {
 
       case Block(stats) => generateSequence(ctx, stats, optFinalExpr = None)
-      case Sequence(stats, expr) => generateSequence(ctx, stats, Some(expr))
+      case Sequence(stats, exprOpt) => generateSequence(ctx, stats, exprOpt)
 
       case LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
@@ -149,7 +149,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitVarInsn(opCode, localIdx)
 
       // typechecker ensures that callee is a VariableRef
-      case Call(VariableRef(name), args) => {
+      case Call(name, args) => {
 
         // will be used as a callback when generating built-in functions
         val generateArgs: () => Unit = { () =>
@@ -262,27 +262,12 @@ final class Backend[V <: ClassVisitor](
           mv.visitLabel(trueLabel)
           mv.visitInsn(Opcodes.ICONST_1)
           mv.visitLabel(endLabel)
-        } else if (operator == LessThan && tpe == IntType) {
-          /*
-           *   if_icmplt trueLabel  (goto trueLabel if lhs < rhs)
-           *   push false
-           *   goto endLabel
-           * trueLabel:
-           *   push true
-           * endLabel:
-           */
-          val trueLabel = new Label()
-          val endLabel = new Label()
-          mv.visitJumpInsn(Opcodes.IF_ICMPLT, trueLabel)
-          mv.visitInsn(Opcodes.ICONST_0)
-          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
-          mv.visitLabel(trueLabel)
-          mv.visitInsn(Opcodes.ICONST_1)
-          mv.visitLabel(endLabel)
-        } else if (operator == LessThan && tpe == DoubleType) {
+        } else if (isComparisonOperator(operator) && tpe == IntType) {
+          generateIntComparisonOperation(lhs, operator, rhs)
+        } else if ((operator == LessThan || operator == GreaterThan) && tpe == DoubleType) {
           /*
            *   dcmpg  (returns -1 if lhs < rhs)
-           *   if < 0 goto trueLabel
+           *   if <cmp> 0 goto trueLabel, where <cmp> = < or >
            *   push false
            *   goto endLabel
            * trueLabel:
@@ -292,7 +277,8 @@ final class Backend[V <: ClassVisitor](
           mv.visitInsn(Opcodes.DCMPG)
           val trueLabel = new Label()
           val endLabel = new Label()
-          mv.visitJumpInsn(Opcodes.IFLT, trueLabel)
+          val opcode = if operator == LessThan then Opcodes.IFLT else Opcodes.IFGT
+          mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
           mv.visitLabel(trueLabel)
@@ -403,7 +389,7 @@ final class Backend[V <: ClassVisitor](
       case PanicStat(msg) =>
         generateExceptionCode(ctx, msg)
 
-      case assertion@Assertion(formulaExpr, descr, isAssumed) =>
+      case assertion@Assertion(formulaExpr, descr, isAssumed) if !isAssumed =>
         /*
          *  if formulaExpr != 0 goto OK_label
          *    throw Exception
@@ -417,6 +403,8 @@ final class Backend[V <: ClassVisitor](
           ": " ++ descr
         generateExceptionCode(ctx, StringLit(descrWithPos))
         mv.visitLabel(okLabel)
+
+      case assertion: Assertion if assertion.isAssumed => ()  // do not check assumptions at runtime (only assertions)
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
@@ -441,11 +429,6 @@ final class Backend[V <: ClassVisitor](
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
-      // if unused value put on the stack then drop it
-      stat match {
-        case expr: Expr if expr.getType != VoidType => mv.visitInsn(Opcodes.POP)
-        case _ => ()
-      }
     }
     optFinalExpr.foreach { finalExpr =>
       generateCode(finalExpr, newCtx)
@@ -476,6 +459,41 @@ final class Backend[V <: ClassVisitor](
     mv.visitLabel(falseLabel)
     elseBrOpt.foreach(generateCode(_, ctx))
     mv.visitLabel(endLabel)
+  }
+
+  private def generateIntComparisonOperation(lhs: Expr, operator: Operator, rhs: Expr)(implicit mv: MethodVisitor): Unit = {
+    /*
+     *   if_<cmp> trueLabel  (goto trueLabel if comparison is verified)
+     *   push false
+     *   goto endLabel
+     * trueLabel:
+     *   push true
+     * endLabel:
+     */
+    val opcode = operator match {
+      case Operator.LessThan => Opcodes.IF_ICMPLT
+      case Operator.LessOrEq => Opcodes.IF_ICMPLE
+      case Operator.GreaterThan => Opcodes.IF_ICMPGT
+      case Operator.GreaterOrEq => Opcodes.IF_ICMPGE
+      case _ => assert(false)
+    }
+    val trueLabel = new Label()
+    val endLabel = new Label()
+    mv.visitJumpInsn(opcode, trueLabel)
+    mv.visitInsn(Opcodes.ICONST_0)
+    mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+    mv.visitLabel(trueLabel)
+    mv.visitInsn(Opcodes.ICONST_1)
+    mv.visitLabel(endLabel)
+  }
+
+  private def isComparisonOperator(operator: Operator): Boolean = {
+    operator match
+      case Operator.LessThan => true
+      case Operator.LessOrEq => true
+      case Operator.GreaterThan => true
+      case Operator.GreaterOrEq => true
+      case _ => false
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

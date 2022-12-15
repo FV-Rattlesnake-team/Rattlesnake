@@ -1,4 +1,5 @@
 import compiler.Errors.{ErrorReporter, errorsExitCode}
+import compiler.desugarer.Desugarer
 import compiler.io.SourceFile
 import compiler.parser.LL1Iterator
 import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines}
@@ -13,6 +14,8 @@ import scala.collection.mutable
 object Main {
 
   private val cmdLineExitCode = -22
+
+  private val defaultVerifTimeout = 2
 
   private val java8Tag = "java8"
   private val java11Tag = "java11"
@@ -87,6 +90,7 @@ object Main {
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
           case "desugar" => (Desugar(argsMap), files)
+          case "verify" => (Verify(argsMap), files)
           case _ => error(s"unknown command: $cmd")
         }
       }
@@ -152,12 +156,26 @@ object Main {
     indent
   }
 
+  private def getTimeoutArg(argsMap: MutArgsMap): Int = {
+    val argStr = getValuedArg("timeout", argsMap, Some(defaultVerifTimeout.toString))
+    val timeout = argStr.toIntOption.getOrElse(error(s"could not convert $argStr to an integer"))
+    if (timeout <= 0){
+      error("timeout must be positive")
+    }
+    timeout
+  }
+
   private def getPrintAllParenthesesArg(argsMap: MutArgsMap): Boolean = {
     getUnvalArg("all-parenth", argsMap)
   }
 
-  private def getDesugarOperatorsArg(argsMap: MutArgsMap): Boolean = {
-    getUnvalArg("desugar-ops", argsMap)
+  private def getDesugarerModeArg(argsMap: MutArgsMap): Desugarer.Mode = {
+    if getUnvalArg("compile-like", argsMap) then Desugarer.Mode.Compile
+    else Desugarer.Mode.Verify
+  }
+
+  private def getRenameVarsArg(argsMap: MutArgsMap): Boolean = {
+    getUnvalArg("rename-vars", argsMap)
   }
 
   private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
@@ -280,14 +298,33 @@ object Main {
       val desugarer = TasksPipelines.desugarer(
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
-        getDesugarOperatorsArg(argsMap),
+        getDesugarerModeArg(argsMap),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),
-        getPrintAllParenthesesArg(argsMap)
+        getPrintAllParenthesesArg(argsMap),
+        getRenameVarsArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
       desugarer.apply(sources.head)
       succeed()
+    }
+  }
+
+  private case class Verify(argsMap: MutArgsMap) extends Action {
+    override def run(sources: List[SourceCodeProvider]): Unit = {
+      val verifier = TasksPipelines.verifier(
+        getOutDirArg(argsMap),
+        getTimeoutArg(argsMap),
+        logger = println
+      )
+      reportUnknownArgsIfAny(argsMap)
+      val score = verifier.apply(sources)
+      println
+      if (score.allPassed) {
+        println(s"Program verification succeeded ($score)")
+      } else {
+        println(s"Program verification FAILED ($score)")
+      }
     }
   }
 
@@ -341,11 +378,17 @@ object Main {
         |desugar: show the file after desugaring
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default same as input)
-        |       -desugar-ops: flag indicating that desugaring must be complete, i.e. that operators should be desugared
-        |                     (e.g.  `x && y`  is desugared to  `when x then y else false` )
+        |       -compile-like: flag indicating that desugaring must be done in the same way as before compilation
+        |                      (by default it is done like before verification)
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
+        |       -rename-vars: flag indicating that renaming should be performed, i.e. they should have identifiers that
+        |                     are unique across the program
+        |verify: run formal verification on the input files
+        | args: -out-dir=...: required, directory where to write the formula files (directory is created or cleared if
+        |                     it already exists)
+        |       -timeout=...: optional, timeout in seconds of each query to the solver (2 seconds by default)
         |help: displays help (this)
         |""".stripMargin)
   }

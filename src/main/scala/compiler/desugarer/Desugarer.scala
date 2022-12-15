@@ -2,7 +2,7 @@ package compiler.desugarer
 
 import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
+import compiler.{AnalysisContext, CompilerStep, FunctionalChecker, FunctionsToInject, Replacer, UniqueIdGenerator}
 import lang.Operator.*
 import lang.{Operator, Operators}
 import lang.Types.PrimitiveType.*
@@ -22,8 +22,10 @@ import lang.SoftKeywords.Result
  *  - `x || y` ---> `when x then true else y`
  *  - `[x_1, ... , x_n]` ---> `val $0 = arr Int[n]; $0[0] = x_1; ... ; $0[n-1] = x_n; $0`
  */
-final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
-  private val uniqueIdGenerator = new UniqueIdGenerator()
+final class Desugarer(mode: Desugarer.Mode)
+  extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
+
+  private val uniqueIdGenerator = new UniqueIdGenerator("$")
 
   /*
   * =========================================================================
@@ -47,10 +49,13 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   private def desugar(funDef: FunDef)(implicit ctx: AnalysisContext): FunDef = {
     val Block(bodyStats) = desugar(funDef.body)
     val newBodyStats = funDef.precond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula), isAssumed = true).setPositionSp(funDef.getPosition))
+      desugar(assumption(formula, PrettyPrinter.prettyPrintStat(formula)).setPositionSp(funDef.getPosition))
     ) ++ bodyStats
     val postcondWithRenaming = funDef.postcond.map(formula =>
-      desugar(Assertion(formula, PrettyPrinter.prettyPrintExpr(formula))).setPositionSp(funDef.getPosition)
+      desugar(assertion(
+        formula,
+        PrettyPrinter.prettyPrintStat(formula)
+      ))
     )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
       addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
@@ -75,16 +80,39 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   }
 
   private def desugar(ifThenElse: IfThenElse)(implicit ctx: AnalysisContext): IfThenElse = {
-    IfThenElse(desugar(ifThenElse.cond), desugar(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(desugar))
+    val desugaredCond = desugar(ifThenElse.cond)
+    val desugaredInitThenBr = desugar(ifThenElse.thenBr)
+    val desugaredInitElseBrOpt = ifThenElse.elseBrOpt.map(desugar)
+    val newThenBr = blockify(
+      List(assumption(desugaredCond, "then assumption")),
+      desugaredInitThenBr,
+      Nil
+    )
+    val elseBrAssumption = assumption(not(desugaredCond), "else assumption")
+    val newElseBr = desugaredInitElseBrOpt.map { elseBr =>
+      blockify(
+        List(elseBrAssumption),
+        elseBr,
+        Nil
+      )
+    }.getOrElse(elseBrAssumption)
+    IfThenElse(desugaredCond, newThenBr, Some(newElseBr))
   }
 
   private def desugar(whileLoop: WhileLoop)(implicit ctx: AnalysisContext): Statement = {
+    val desugaredCond = desugar(whileLoop.cond)
     val desugaredInvariants = whileLoop.invariants.map(invar =>
-      desugar(Assertion(invar, PrettyPrinter.prettyPrintExpr(invar)).setPositionSp(whileLoop.getPosition))
+      desugar(assertion(
+        invar,
+        "invariant " ++ PrettyPrinter.prettyPrintStat(invar)
+      ).setPositionSp(invar.getPosition))
     )
-    val newBodyStats = desugaredInvariants ++ whileLoop.body.asInstanceOf[Block].stats
-    val loop = WhileLoop(desugar(whileLoop.cond), desugar(Block(newBodyStats)), Nil)
-    if desugaredInvariants.isEmpty then loop else Block(loop :: desugaredInvariants)
+    val invarAssumed = desugaredInvariants.map(_.copy(isAssumed = true))
+    val whileBodyAssumptions = assumption(desugaredCond, "while body")
+    val newBody = blockify(whileBodyAssumptions :: invarAssumed, whileLoop.body, desugaredInvariants)
+    val loop = WhileLoop(desugaredCond, desugar(newBody), Nil)
+    val whileEndAssumption = assumption(not(desugaredCond), "while end")
+    blockify(desugaredInvariants, loop, whileEndAssumption :: invarAssumed)
   }
 
   private def desugar(forLoop: ForLoop)(implicit ctx: AnalysisContext): Block = {
@@ -96,15 +124,18 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   }
 
   private def desugar(returnStat: ReturnStat)(implicit ctx: AnalysisContext): ReturnStat = {
-    ReturnStat(returnStat.optVal.map(desugar))
+    val newRetStat = ReturnStat(returnStat.optVal.map(desugar))
+    newRetStat.setPosition(returnStat.getPosition)
+    newRetStat
   }
 
-  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): PanicStat = {
-    PanicStat(desugar(panicStat.msg))
+  private def desugar(panicStat: PanicStat)(implicit ctx: AnalysisContext): Statement = {
+    if mode.desugarPanic then Assertion(BoolLit(false), PrettyPrinter.prettyPrintStat(panicStat), isAssumed = false)
+    else PanicStat(desugar(panicStat.msg))
   }
 
   private def desugar(assertion: Assertion)(implicit ctx: AnalysisContext): Assertion = {
-    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed).setPositionSp(assertion.getPosition)
+    Assertion(desugar(assertion.formulaExpr), assertion.descr, assertion.isAssumed)
   }
 
   private def desugar(expr: Expr)(implicit ctx: AnalysisContext): Expr = {
@@ -115,10 +146,10 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
 
-      case call@Call(callee@VariableRef(name), args) =>
-        val funInfo = ctx.functions(name)
-        if (funInfo.precond.isEmpty && funInfo.postcond.isEmpty) {
-          Call(desugar(callee), args.map(desugar)).setType(callee.getType)
+      case call@Call(calleeName, args) =>
+        val funInfo = ctx.functions(calleeName)
+        if (funInfo.isBuiltin) {
+          Call(calleeName, args.map(desugar)).setType(funInfo.sig.retType)
         } else {
           val argsUids = for _ <- funInfo.sig.argTypes yield uniqueIdGenerator.next()
           val argsLocalDefsAndRefs = funInfo.sig.argTypes.indices.map { idx =>
@@ -135,24 +166,37 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
           // can do optDef.get because only built-in functions can have None as a funDef, and built-ins do not have postconditions
           // can call zip because the typechecker checked the number of arguments
           val resultLocalRef = VariableRef(resultUid).setType(funInfo.sig.retType)
-          val argsRenameMap = funInfo.optDef.get.params.map(_.paramName).zip(argsLocalReferences).toMap + (Result.str -> resultLocalRef)
-          val newCall = Call(desugar(callee), argsLocalReferences).setType(funInfo.sig.retType)
-          Sequence(
+          val argsRenameMap = {
+            funInfo.optDef.get.params
+              .map(_.paramName)
+              .zip(argsLocalReferences)
+              .toMap + (Result.str -> resultLocalRef) // resultLocalDef is ignored if return type is Void
+          }
+          val retIsNoValType = funInfo.sig.retType.isNoValType
+          val newCall = Call(calleeName, argsLocalReferences).setType(funInfo.sig.retType)
+          val newCallLine = {
+            if retIsNoValType then newCall
+            else LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)
+          }
+          val allPostcond = funInfo.postcond ++ funInfo.optDef.flatMap(generateTrivialPostcond)
+          val stats = {
             argsLocalDefinitions ++
               funInfo.precond.map(formula =>
-                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula))
-                  .setPositionSp(call.getPosition))
+                desugar(assertion(
+                  Replacer.replaceInExpr(desugar(formula), argsRenameMap),
+                  "precond  " ++ PrettyPrinter.prettyPrintStat(formula)
+                ).setPositionSp(call.getPosition))
               ) ++
-              List(LocalDef(resultUid, Some(funInfo.sig.retType), newCall, isReassignable = false)) ++
-              funInfo.postcond.map(formula =>
-                desugar(Assertion(Replacer.replaceInExpr(desugar(formula), argsRenameMap), PrettyPrinter.prettyPrintExpr(formula), isAssumed = true)
-                  .setPositionSp(call.getPosition))
-              ),
-            resultLocalRef
-          )
+              List(newCallLine) ++
+              allPostcond.map(formula =>
+                desugar(assumption(
+                  Replacer.replaceInExpr(desugar(formula), argsRenameMap),
+                  PrettyPrinter.prettyPrintStat(formula)
+                ).setPositionSp(call.getPosition))
+              )
+          }
+          Sequence(stats, if retIsNoValType then None else Some(resultLocalRef))
         }
-
-      case Call(_, _) => assert(false)
 
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems) =>
@@ -165,23 +209,24 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
         val arrElemAssigStats = arrayElems.map(desugar).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
         }
-        Sequence(arrayValDefinition :: arrElemAssigStats, arrValRef)
+        Sequence(arrayValDefinition :: arrElemAssigStats, Some(arrValRef))
 
       case unaryOp@UnaryOp(operator, operand) =>
-        if desugarOperators then desugarUnaryOp(unaryOp)
+        if mode.desugarOperators then desugarUnaryOp(unaryOp)
         else UnaryOp(operator, desugar(operand))
 
-      case BinaryOp(lhs, Equality, rhs) if lhs.getType == StringType => {
+      case BinaryOp(lhs, Equality, rhs) if lhs.getType.subtypeOf(StringType) => {
         val desugaredLhs = desugar(lhs)
         val desugaredRhs = desugar(rhs)
-        Call(
-          VariableRef(FunctionsToInject.stringEqualityMethodName).setType(UndefinedType),
+        if mode.desugarStringEq then Call(
+          FunctionsToInject.stringEqualityMethodName,
           List(desugaredLhs, desugaredRhs)
         ).setType(BoolType)
+        else BinaryOp(desugaredLhs, Equality, desugaredRhs)
       }
 
       case binaryOp@BinaryOp(lhs, operator, rhs) =>
-        if desugarOperators then desugarBinaryOp(binaryOp)
+        if mode.desugarOperators then desugarBinaryOp(binaryOp)
         else BinaryOp(desugar(lhs), operator, desugar(rhs))
 
       case select: Select => Select(desugar(select.lhs), select.selected)
@@ -190,15 +235,23 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
       case Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
         if (thenBr.getType == NothingType) {
           val ifStat = IfThenElse(cond, thenBr, None)
-          desugar(Sequence(List(ifStat), elseBr))
+          desugar(Sequence(List(ifStat), Some(elseBr)))
         } else {
           val ifStat = IfThenElse(UnaryOp(ExclamationMark, cond).setType(BoolType), elseBr, None)
-          desugar(Sequence(List(ifStat), thenBr))
+          desugar(Sequence(List(ifStat), Some(thenBr)))
         }
       }
-      case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
+      case Ternary(cond, thenBr, elseBr) =>
+        val desugaredCond = desugar(cond)
+        val desugaredThenBr = desugar(thenBr)
+        val desugaredElseBr = desugar(elseBr)
+        Ternary(
+          desugaredCond,
+          sequencify(List(assumption(desugaredCond, "then assumption")), desugaredThenBr),
+          sequencify(List(assumption(not(desugaredCond), "else assumption")), desugaredElseBr)
+        )
       case Cast(expr, tpe) => Cast(desugar(expr), tpe)
-      case Sequence(stats, expr) => Sequence(stats.map(desugar), desugar(expr))
+      case Sequence(stats, exprOpt) => Sequence(stats.map(desugar), exprOpt.map(desugar))
     }
     desugared.setTypeOpt(expr.getTypeOpt)
   }
@@ -206,18 +259,15 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
   private def desugarBinaryOp(binaryOp: BinaryOp)(implicit ctx: AnalysisContext): Expr = {
     val desugaredLhs = desugar(binaryOp.lhs)
     val desugaredRhs = desugar(binaryOp.rhs)
+    val isDoubleOp = binaryOp.lhs.getType == DoubleType || binaryOp.rhs.getType == DoubleType
     binaryOp.operator match {
 
       // x <= y ---> x <= y || x == y
-      case LessOrEq => desugar(BinaryOp(
-        BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
-        Or,
-        BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
-      ))
+      case LessOrEq if isDoubleOp =>
+        makeDoubleCompOrEq(desugaredLhs, LessThan, desugaredRhs)
 
-      // x > y ---> y < x  (and similar with >=)
-      case GreaterThan => desugar(BinaryOp(desugaredRhs, LessThan, desugaredLhs))
-      case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs))
+      case GreaterOrEq if isDoubleOp =>
+        makeDoubleCompOrEq(desugaredLhs, GreaterThan, desugaredRhs)
 
       // x != y ---> !(x == y)
       case Inequality =>
@@ -236,13 +286,36 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
     }
   }
 
+  private def makeDoubleCompOrEq(desugaredLhs: Expr, strictCompOp: Operator, desugaredRhs: Expr)(implicit analysisContext: AnalysisContext) = {
+    require(strictCompOp == LessThan || strictCompOp == GreaterThan)
+    val lhsLocalName = uniqueIdGenerator.next()
+    val rhsLocalName = uniqueIdGenerator.next()
+    val lhsLocalRef = VariableRef(lhsLocalName).setType(DoubleType)
+    val rhsLocalRef = VariableRef(rhsLocalName).setType(DoubleType)
+    Sequence(List(
+      LocalDef(lhsLocalName, Some(DoubleType), desugaredLhs, isReassignable = false),
+      LocalDef(rhsLocalName, Some(DoubleType), desugaredRhs, isReassignable = false)
+    ), Some(
+      desugar(BinaryOp(
+        BinaryOp(lhsLocalRef, strictCompOp, rhsLocalRef).setType(BoolType),
+        Or,
+        BinaryOp(lhsLocalRef, Equality, rhsLocalRef).setType(BoolType)
+      ).setType(BoolType))
+    ))
+  }
+
   private def desugarUnaryOp(unaryOp: UnaryOp)(implicit ctx: AnalysisContext): Expr = {
     val UnaryOp(operator, operand) = unaryOp
     val desugaredOperand = desugar(operand)
     operator match {
       case Minus if operand.getType == IntType => BinaryOp(IntLit(0), Minus, desugaredOperand)
       case Minus if operand.getType == DoubleType => BinaryOp(DoubleLit(0.0), Minus, desugaredOperand)
-      case ExclamationMark => Ternary(desugaredOperand, BoolLit(false), BoolLit(true))
+      case ExclamationMark => {
+        desugaredOperand match {
+          case UnaryOp(ExclamationMark, subOperand) => subOperand
+          case _ => BinaryOp(desugaredOperand, Equality, BoolLit(false))
+        }
+      }
       case _ => UnaryOp(operator, desugaredOperand)
     }
   }
@@ -273,7 +346,7 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
     if (rawAssertions.isEmpty) {
       stat
     } else {
-      val resStat = stat match {
+      val resStat: Statement = stat match {
         case Block(stats) => Block(stats.map(addAssertsOnRetVals))
         case LocalDef(localName, optType, rhs, isReassignable) =>
           LocalDef(localName, optType, addAssertsOnRetVals(rhs), isReassignable)
@@ -296,7 +369,7 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
           Assertion(addAssertsOnRetVals(formulaExpr), descr, isAssumed).setPositionSp(stat.getPosition)
         case literal: Literal => literal
         case variableRef: VariableRef => variableRef
-        case Call(callee, args) => Call(addAssertsOnRetVals(callee), args.map(addAssertsOnRetVals))
+        case Call(callee, args) => Call(callee, args.map(addAssertsOnRetVals))
         case Indexing(indexed, arg) => Indexing(addAssertsOnRetVals(indexed), addAssertsOnRetVals(arg))
         case ArrayInit(elemType, size) => ArrayInit(elemType, addAssertsOnRetVals(size))
         case FilledArrayInit(arrayElems) => FilledArrayInit(arrayElems.map(addAssertsOnRetVals))
@@ -308,21 +381,27 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
         case Ternary(cond, thenBr, elseBr) =>
           Ternary(addAssertsOnRetVals(cond), addAssertsOnRetVals(thenBr), addAssertsOnRetVals(elseBr))
         case Cast(expr, tpe) => Cast(addAssertsOnRetVals(expr), tpe)
-        case Sequence(stats, expr) => Sequence(stats.map(addAssertsOnRetVals), addAssertsOnRetVals(expr))
+        case Sequence(stats, exprOpt) => Sequence(stats.map(addAssertsOnRetVals), exprOpt.map(addAssertsOnRetVals))
         case retNone@ReturnStat(None) => retNone
 
         case retStat@ReturnStat(Some(retVal)) =>
           val uid = uniqueIdGenerator.next()
           val newLocalRef = VariableRef(uid).setType(retVal.getType)
-          val renamedAssertions = rawAssertions.map(assertion =>
-            Assertion(
-              formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
-              assertion.descr,
-              assertion.isAssumed
-            ).setPositionSp(retStat.getPosition)
-          )
-          Block(
-            LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions ++ List(ReturnStat(Some(newLocalRef)))
+          val renamedAssertions = {
+            rawAssertions
+              .map(_.copy().setPositionSp(retStat.getPosition))
+              .map(assertion =>
+                Assertion(
+                  formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
+                  "postcond " ++ assertion.descr,
+                  isAssumed = false
+                ).setPositionSp(retStat.getPosition)
+              )
+          }
+          blockify(
+            LocalDef(uid, retVal.getTypeOpt, retVal, isReassignable = false) :: renamedAssertions,
+            ReturnStat(Some(newLocalRef)),
+            Nil
           )
       }
       assert(resStat.isInstanceOf[Expr] == stat.isInstanceOf[Expr])
@@ -333,6 +412,70 @@ final class Desugarer(desugarOperators: Boolean) extends CompilerStep[(List[Sour
       }
       resStat.asInstanceOf[S]
     }
+  }
+
+  private def generateTrivialPostcond(funDef: FunDef)(implicit analysisContext: AnalysisContext): Option[Expr] = {
+    funDef.body match
+      case Block(List(ReturnStat(Some(expr))))
+        if expr.collect { case Call(callee, _) if callee == funDef.funName => () }.isEmpty
+          && FunctionalChecker.isPurelyFunctional(expr)
+      =>
+        Some(BinaryOp(
+          VariableRef(Result.str).setType(funDef.signature.retType),
+          Equality,
+          expr
+        ).setType(BoolType))
+      case _ => None
+  }
+
+  private def not(expr: Expr): Expr = {
+    UnaryOp(ExclamationMark, expr).setType(BoolType)
+  }
+
+  private def blockify(before: List[Statement], possiblyBlock: Statement, after: List[Statement]): Block = {
+    possiblyBlock match {
+      case block: Block if before.isEmpty && after.isEmpty => block
+      case Block(stats) => Block(before ++ stats ++ after)
+      case middleStat => Block(before ++ List(middleStat) ++ after)
+    }
+  }
+
+  private def sequencify(before: List[Statement], possiblySeq: Expr): Expr = {
+    possiblySeq match {
+      case Sequence(stats, exprOpt) =>
+        Sequence(before ++ stats, exprOpt)
+      case notSeq =>
+        Sequence(before, Some(notSeq))
+    }
+  }
+
+  private def assumption(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
+    Assertion(desugar(formula), descr, isAssumed = true)
+  }
+
+  private def assertion(formula: Expr, descr: String)(implicit analysisContext: AnalysisContext): Assertion = {
+    Assertion(desugar(formula), descr, isAssumed = false)
+  }
+
+}
+
+object Desugarer {
+
+  enum Mode(
+             val desugarOperators: Boolean,
+             val desugarStringEq: Boolean,
+             val desugarPanic: Boolean
+           ) {
+    case Compile extends Mode(
+      desugarOperators = true,
+      desugarStringEq = true,
+      desugarPanic = false
+    )
+    case Verify extends Mode(
+      desugarOperators = false,
+      desugarStringEq = false,
+      desugarPanic = true
+    )
   }
 
 }

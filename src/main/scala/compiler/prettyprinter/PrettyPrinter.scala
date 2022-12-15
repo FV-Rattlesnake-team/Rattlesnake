@@ -27,8 +27,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Block(stats) =>
         addBracesList(stats, ";", onMultipleLines = true)
 
-      case Sequence(stats, expr) =>
-        addBracesList(stats :+ expr, ";", onMultipleLines = true)
+      case Sequence(stats, exprOpt) =>
+        addBracesList(stats ++ exprOpt, ";", onMultipleLines = true)
 
       case FunDef(funName, args, optRetType, body, precond, postcond) =>
         pps
@@ -101,7 +101,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.add(name)
 
       case Call(callee, args) =>
-        addAst(callee)
+        pps.add(callee)
         addParenthList(args)
 
       case Indexing(indexed, arg) =>
@@ -223,6 +223,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         if (invariants.nonEmpty){
           pps.newLine()
         }
+        pps.addSpace()
         addAst(body)
 
       case ForLoop(initStats, cond, stepStats, body, invariants) =>
@@ -360,8 +361,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
 object PrettyPrinter {
 
-  def prettyPrintExpr(expr: Expr, displayAllParentheses: Boolean = false): String = {
-    new PrettyPrinter(displayAllParentheses = displayAllParentheses).apply(expr)
+  def prettyPrintStat(statement: Statement, displayAllParentheses: Boolean = false): String = {
+    new PrettyPrinter(displayAllParentheses = displayAllParentheses).apply(statement)
   }
 
 }

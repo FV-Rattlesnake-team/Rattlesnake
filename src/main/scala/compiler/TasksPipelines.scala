@@ -9,7 +9,10 @@ import compiler.irs.Asts
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
+import compiler.renamer.Renamer
 import compiler.typechecker.TypeChecker
+import compiler.verification.solver.Z3Solver
+import compiler.verification.{PathsGenerator, PathsVerifier}
 import org.objectweb.asm.ClassVisitor
 
 import java.nio.file.Path
@@ -64,20 +67,36 @@ object TasksPipelines {
    */
   def desugarer(outputDirectoryPath: Path,
                 filename: String,
-                desugarOperators: Boolean,
+                desugarerMode: Desugarer.Mode,
                 indentGranularity: Int,
                 overwriteFileCallback: String => Boolean,
-                displayAllParentheses: Boolean
+                displayAllParentheses: Boolean,
+                renameVars: Boolean
                ): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
-    frontend(er)
-      .andThen(Mapper(List(_)))
-      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
-      .andThen(new TypeChecker(er))
-      .andThen(new Desugarer(desugarOperators = desugarOperators))
+    val noRenamePipeline = {
+      frontend(er)
+        .andThen(Mapper(List(_)))
+        .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+        .andThen(new TypeChecker(er))
+        .andThen(new Desugarer(desugarerMode))
+    }
+    val transfPipeline = if renameVars then noRenamePipeline.andThen(new Renamer()) else noRenamePipeline
+    transfPipeline
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
+  }
+
+  def verifier(outputDirPath: Path, timeoutSec: Int, logger: String => Unit): CompilerStep[List[SourceCodeProvider], PathsVerifier.Score] = {
+    val er = createErrorReporter
+    MultiStep(frontend(er))
+      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+      .andThen(new TypeChecker(er))
+      .andThen(new Desugarer(Desugarer.Mode.Verify))
+      .andThen(new Renamer())
+      .andThen(new PathsGenerator())
+      .andThen(new PathsVerifier(Z3Solver(outputDirPath), timeoutSec, er, logger))
   }
 
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,
@@ -88,7 +107,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer(desugarOperators = true))
+      .andThen(new Desugarer(Desugarer.Mode.Compile))
       .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject))
   }
 

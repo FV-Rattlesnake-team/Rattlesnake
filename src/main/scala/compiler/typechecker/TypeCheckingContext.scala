@@ -34,7 +34,7 @@ final case class TypeCheckingContext(analysisContext: AnalysisContext, locals: m
    * @param forbiddenTypeCallback to be called if the local has a type that is not acceptable for a local
    */
   def addLocal(name: String, tpe: Type, isReassignable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
-    if (tpe == NothingType || tpe == VoidType) {
+    if (tpe.isNoValType) {
       forbiddenTypeCallback()
     } else if (locals.contains(name)) {
       duplicateVarCallback()

@@ -2,13 +2,14 @@ package compiler.typechecker
 
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
+import compiler.FunctionalChecker.isPurelyFunctional
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, Position}
+import compiler.{AnalysisContext, CompilerStep, FunctionalChecker, Position}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.SoftKeywords.Result
-import lang.{Operators, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
+import lang.{Operators, TypeConversion}
 
 final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
@@ -58,6 +59,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           errorReporter.push(Err(TypeChecking, s"function arguments cannot be named '$Result'", funDef.getPosition))
         }
         checkPreAndPostcond(ctx, funDef, params, precond, postcond, expRetType)
+        checkNoRecInFormulas(funDef)
         VoidType
 
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
@@ -92,18 +94,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             reportError(s"not found: '$name'", varRef.getPosition)
         }
 
-      case call@Call(callee, args) =>
-        callee match {
-          case varRef@VariableRef(name) =>
-            ctx.functions.get(name).map(_.sig) match {
-              case Some(funSig) =>
-                varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
-                checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
-                funSig.retType
+      case call@Call(calleeName, args) =>
+        ctx.functions.get(calleeName).map(_.sig) match {
+          case Some(funSig) =>
+            checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
+            funSig.retType
 
-              case None => reportError(s"not found: $name", call.getPosition)
-            }
-          case _ => reportError("syntax error, only functions can be called", call.getPosition)
+          case None => reportError(s"not found: $calleeName", call.getPosition)
         }
 
       case Indexing(indexed, arg) =>
@@ -120,7 +117,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if indexedError then UndefinedType else indexedType.asInstanceOf[ArrayType].elemType
 
       case arrayInit@ArrayInit(elemType, size) =>
-        if (elemType == VoidType || elemType == NothingType) {
+        if (elemType.isNoValType) {
           reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
         }
         val sizeType = check(size, ctx)
@@ -261,20 +258,14 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
-      case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
-        val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ifThenElse.getPosition)
-        }
+      case IfThenElse(cond, thenBr, elseBrOpt) =>
+        checkControlFlowCond(cond, ctx)
         check(thenBr, ctx)
         elseBrOpt.foreach(check(_, ctx))
         VoidType
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
-        val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ternary.getPosition)
-        }
+        checkControlFlowCond(cond, ctx)
         val thenType = check(thenBr, ctx)
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
@@ -288,10 +279,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
 
       case whileLoop@WhileLoop(cond, body, invariants) =>
-        val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", whileLoop.getPosition)
-        }
+        checkControlFlowCond(cond, ctx)
         check(body, ctx)
         checkVerificationFormulas(invariants.map((_, whileLoop.getPosition)), ctx)
         VoidType
@@ -299,13 +287,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case forLoop@ForLoop(initStats, cond, stepStats, body, invariants) =>
         val newCtx = ctx.copied
         initStats.foreach(check(_, newCtx))
-        val condType = check(cond, newCtx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", forLoop.getPosition)
-        }
+        checkControlFlowCond(cond, newCtx)
         stepStats.foreach(check(_, newCtx))
         check(body, newCtx)
-        checkVerificationFormulas(invariants.map((_, forLoop.getPosition)), ctx)
+        checkVerificationFormulas(invariants.map((_, forLoop.getPosition)), newCtx)
         VoidType
 
       case ReturnStat(valueOpt) =>
@@ -424,6 +409,25 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     }
   }
 
+  private def checkNoRecInFormulas(funDef: FunDef): Unit = {
+    funDef.precond.foreach(checkNoRecInFormula(_, funDef))
+    funDef.postcond.foreach(checkNoRecInFormula(_, funDef))
+    funDef.collect {
+      case Assertion(formulaExpr, _, _) =>
+        checkNoRecInFormula(formulaExpr, funDef)
+      case whileLoop: WhileLoop =>
+        whileLoop.invariants.foreach(checkNoRecInFormula(_, funDef))
+      case forLoop: ForLoop =>
+        forLoop.invariants.foreach(checkNoRecInFormula(_, funDef))
+    }
+  }
+
+  private def checkNoRecInFormula(formula: Expr, enclosingFunc: FunDef): Unit = {
+    if (formula.collect { case Call(callee, _) if callee == enclosingFunc.funName => () }.nonEmpty){
+      reportError("recursive calls are forbidden in formulas", formula.getPosition)
+    }
+  }
+
   /**
    * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
@@ -510,9 +514,19 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       if (!formulaType.subtypeOf(BoolType)) {
         reportError(s"formulas in assert and assume statements must have result type '${BoolType.str}', found '$formulaType'", pos)
       }
-      if (!formulaExpr.isPurelyFunctional) {
-        reportError("verification formulas should not contain side effects or function calls", pos)
+      if (!isPurelyFunctional(formulaExpr)(ctx.analysisContext)) {
+        reportError("verification formulas should only consist of purely functional expressions", pos)
       }
+    }
+  }
+
+  private def checkControlFlowCond(cond: Expr, ctx: TypeCheckingContext): Unit = {
+    val condType = check(cond, ctx)
+    if (!condType.subtypeOf(BoolType)){
+      reportError(s"control-flow conditions must be of type '$BoolType', found '$condType'", cond.getPosition)
+    }
+    if (!isPurelyFunctional(cond)(ctx.analysisContext)){
+      reportError(s"control-flow conditions are not allowed to use side effects", cond.getPosition)
     }
   }
 
