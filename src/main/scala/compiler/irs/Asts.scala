@@ -127,7 +127,8 @@ object Asts {
                            optRetType: Option[Type],
                            body: Block,
                            precond: List[Expr],
-                           postcond: List[Expr]
+                           postcond: List[Expr],
+                           verifIgnore: Boolean
                          ) extends TopLevelDef {
     val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
 

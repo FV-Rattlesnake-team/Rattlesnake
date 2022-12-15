@@ -20,9 +20,12 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
     } do {
       df match
         case _: StructDef => ()
-        case FunDef(_, _, _, body, _, _) =>
-          val pathBuilder = new Path.Builder()
-          generatePaths(body, List(pathBuilder))(paths)
+        case FunDef(_, _, _, body, _, _, verifIgnore) => {
+          if (!verifIgnore){
+            val pathBuilder = new Path.Builder()
+            generatePaths(body, List(pathBuilder))(paths)
+          }
+        }
     }
     val res = paths.toList
     res.foreach(_.assertAllTypesAreSet())

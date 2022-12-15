@@ -30,7 +30,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Sequence(stats, exprOpt) =>
         addBracesList(stats ++ exprOpt, ";", onMultipleLines = true)
 
-      case FunDef(funName, args, optRetType, body, precond, postcond) =>
+      case FunDef(funName, args, optRetType, body, precond, postcond, _) =>
         pps
           .add(Fn.str)
           .addSpace()

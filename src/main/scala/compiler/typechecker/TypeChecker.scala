@@ -46,7 +46,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
-      case funDef@FunDef(funName, params, optRetType, body, precond, postcond) =>
+      case funDef@FunDef(funName, params, optRetType, body, precond, postcond, _) =>
         optRetType.foreach { retType =>
           if (!ctx.analysisContext.knowsType(retType)) {
             reportError(s"return type is unknown: '$retType'", funDef.getPosition)

@@ -21,6 +21,7 @@ enum Keyword(val str: String) {
   case Require extends Keyword("require")
   case Ensure extends Keyword("ensure")
   case Invar extends Keyword("invar")
+  case Unchecked extends Keyword("unchecked")
 
   override def toString: String = str
 }

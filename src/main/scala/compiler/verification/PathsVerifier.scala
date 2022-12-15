@@ -220,10 +220,8 @@ final class PathsVerifier(
             }
           } else if (lhs.getType.subtypeOf(IntType)) {
             convertOperatorToIntsTheoryOps(operator, lhs, rhs)
-          } else if (lhs.getType.subtypeOf(DoubleType)) {
-            reportUnsupported(DoubleType.str, binOp.getPosition)
           } else {
-            throw new AssertionError(s"binop with lhs type ${lhs.getType}")
+            reportUnsupported(lhs.getType.toString, binOp.getPosition)
           }
         }
         case sel@Select(_, _) =>

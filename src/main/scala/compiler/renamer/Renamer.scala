@@ -21,13 +21,13 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
   private def rename(df: TopLevelDef, globalVarsCtx: GlobalVarsCtx): TopLevelDef = {
     df match
-      case FunDef(funName, params, optRetType, body, precond, postcond) =>
+      case FunDef(funName, params, optRetType, body, precond, postcond, verifIgnore) =>
         assert(precond.isEmpty)
         assert(postcond.isEmpty)
         val ctx = new LocalVarsCtx(globalVarsCtx)
         val newParams = params.map(rename(_, ctx))
         val newBody = rename(body, ctx)
-        FunDef(funName, newParams, optRetType, newBody, Nil, Nil)
+        FunDef(funName, newParams, optRetType, newBody, Nil, Nil, verifIgnore)
       case StructDef(structName, fields) =>
         val ctx = new LocalVarsCtx(globalVarsCtx)
         StructDef(structName, fields.map(rename(_, ctx)))

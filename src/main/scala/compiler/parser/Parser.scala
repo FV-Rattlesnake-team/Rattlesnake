@@ -94,10 +94,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "postcond"
 
   private lazy val funDef = {
-    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe)
+    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(kw(Unchecked)) ::: opt(-> ::: tpe)
       ::: repeat(precond) ::: block ::: repeat(postcond) map {
-      case funName ^: params ^: optRetType ^: preconditions ^: body ^: postconditions =>
-        FunDef(funName, params, optRetType, body, preconditions, postconditions)
+      case funName ^: params ^: optUnchecked ^: optRetType ^: preconditions ^: body ^: postconditions =>
+        FunDef(funName, params, optRetType, body, preconditions, postconditions, optUnchecked.isDefined)
     }
   } setName "funDef"
 

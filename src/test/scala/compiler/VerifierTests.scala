@@ -31,6 +31,7 @@ class VerifierTests {
   @Test def fibonacci2Test(): Unit = runVerifTest("fibonacci2", true)
   @Test def fibonacci3Test(): Unit = runVerifTest("fibonacci3", true)
   @Test def fibonacci4Test(): Unit = runVerifTest("fibonacci4", true)
+  @Test def fibonacci5Test(): Unit = runVerifTest("fibonacci5", true)
   @Test def fibonacciFailTest(): Unit = runVerifTest("fibonacciFail", false)
   @Test def prodTest(): Unit = runVerifTest("prod", true)
   @Test def prodFailTest(): Unit = runVerifTest("prodFail", false)
@@ -43,6 +44,8 @@ class VerifierTests {
   @Test def minEquivFail1Test(): Unit = runVerifTest("minequivFail1", false)
   @Test def minEquivFail2Test(): Unit = runVerifTest("minequivFail2", false)
   @Test def minEquivFail3Test(): Unit = runVerifTest("minequivFail3", false)
+  @Test def uncheckedTest(): Unit = runVerifTest("unchecked", true)
+  @Test def uncheckedFailTest(): Unit = runVerifTest("uncheckedFail", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())

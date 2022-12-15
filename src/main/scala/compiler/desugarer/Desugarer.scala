@@ -58,7 +58,7 @@ final class Desugarer(mode: Desugarer.Mode)
       ))
     )
     FunDef(funDef.funName, funDef.params.map(desugar), funDef.optRetType,
-      addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil)
+      addAssertsOnRetVals(Block(newBodyStats))(postcondWithRenaming), Nil, Nil, funDef.verifIgnore)
   }
 
   private def desugar(structDef: StructDef)(implicit ctx: AnalysisContext): StructDef = {
