@@ -4,7 +4,7 @@ import compiler.verification.solver.Solver
 import compiler.verification.solver.Solver.*
 import smtlib.trees.Commands.{CheckSat, GetModel, Script}
 import smtlib.trees.{Commands, Terms}
-import util.IO
+import compiler.FileExtensions
 
 import java.io.{BufferedReader, FileWriter, IOException, InputStreamReader}
 import java.nio.file.Files
@@ -14,16 +14,17 @@ import scala.util.{Failure, Success, Try, Using}
 
 final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
   private val z3ExecName = "z3"
+  private val filenamePrefix = "z3input"
 
   private def nextFilepath(idx: Int) = {
-    outputDir.resolve(s"z3input_$idx.smt")
+    outputDir.resolve(s"${filenamePrefix}_$idx.${FileExtensions.smt}")
   }
 
 
   override def initialize(): Unit = {
     val dir = outputDir.toFile
     if (dir.exists()) {
-      clearDir()
+      clearZ3InputFilesInDir()
     } else {
       dir.mkdir()
     }
@@ -37,9 +38,11 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     }.recover(exc => Error("Internal error: " ++ exc.getMessage)).get
   }
 
-  private def clearDir(): Unit = {
+  private def clearZ3InputFilesInDir(): Unit = {
     for file <- outputDir.toFile.listFiles() do {
-      IO.deleteRecursively(file)
+      if (file.getName.startsWith(filenamePrefix)){
+        file.delete()
+      }
     }
   }
 
