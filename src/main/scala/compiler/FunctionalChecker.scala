@@ -16,8 +16,8 @@ object FunctionalChecker {
       case Call(name, _) if funNotToCheck.contains(name) => true
       case Call(name, args) => {
         def bodyIsFullyFunctional = {
-          analysisContext.functions.apply(name).optDef match {
-            case None => false // built-in function
+          analysisContext.functions.get(name).flatMap(_.optDef) match {
+            case None => false // built-in function or function not found
             case Some(funDef) => isPurelyFunctionalImpl(funDef, funNotToCheck, analysisContext)
           }
         }
