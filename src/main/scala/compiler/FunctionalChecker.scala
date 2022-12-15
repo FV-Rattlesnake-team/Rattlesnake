@@ -6,10 +6,10 @@ import Asts.*
 object FunctionalChecker {
 
   def isPurelyFunctional(statement: Statement)(implicit analysisContext: AnalysisContext): Boolean = {
-    isPurelyFunctionalImpl(statement)(None, analysisContext)
+    isPurelyFunctionalImpl(statement)(Set.empty, analysisContext)
   }
 
-  private def isPurelyFunctionalImpl(statement: Statement)(implicit funNotToCheck: Option[String], analysisContext: AnalysisContext): Boolean = {
+  private def isPurelyFunctionalImpl(statement: Statement)(implicit funNotToCheck: Set[String], analysisContext: AnalysisContext): Boolean = {
     statement match
       case _: Asts.Literal => true
       case VariableRef(_) => true
@@ -18,7 +18,7 @@ object FunctionalChecker {
         def bodyIsFullyFunctional = {
           analysisContext.functions.apply(name).optDef match {
             case None => false // built-in function
-            case Some(funDef) => isPurelyFunctionalImpl(funDef, analysisContext)
+            case Some(funDef) => isPurelyFunctionalImpl(funDef, funNotToCheck, analysisContext)
           }
         }
         args.forall(isPurelyFunctionalImpl) && bodyIsFullyFunctional
@@ -56,12 +56,12 @@ object FunctionalChecker {
       case Assertion(_, _, _) => false
   }
 
-  def isPurelyFunctional(funDef: FunDef)(implicit analysisContext: AnalysisContext): Boolean = {
-    isPurelyFunctionalImpl(funDef, analysisContext)
+  def isPurelyFunctional(funDef: FunDef)(implicit funNotToCheck: Set[String], analysisContext: AnalysisContext): Boolean = {
+    isPurelyFunctionalImpl(funDef, funNotToCheck, analysisContext)
   }
 
-  private def isPurelyFunctionalImpl(funDef: FunDef, analysisContext: AnalysisContext): Boolean = {
-    implicit val newFunNotToCheck: Option[String] = Some(funDef.funName)
+  private def isPurelyFunctionalImpl(funDef: FunDef, funNotToCheck: Set[String], analysisContext: AnalysisContext): Boolean = {
+    implicit val newFunNotToCheck: Set[String] = funNotToCheck + funDef.funName
     implicit val _analysisContext: AnalysisContext = analysisContext
 
     val stats = funDef.body.stats

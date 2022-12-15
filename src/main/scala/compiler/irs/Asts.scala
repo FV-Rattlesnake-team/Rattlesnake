@@ -392,16 +392,18 @@ object Asts {
   }
 
   final case class Assertion(formulaExpr: Expr, private val _descr: String, isAssumed: Boolean) extends Statement {
-    private var description: String = _descr
+    private var posDescr = ""
 
-    def descr: String = description
+    def descr: String = _descr ++ posDescr
 
     override def children: List[Ast] = List(formulaExpr)
 
     override def setPosition(posOpt: Option[Position]): Unit = {
       super.setPosition(posOpt)
       posOpt.foreach { pos =>
-        description += s" at ${pos.toStringSimpleFilename}"
+        if (posDescr.isEmpty){
+          posDescr += s" at ${pos.toStringSimpleFilename}"
+        }
       }
     }
 

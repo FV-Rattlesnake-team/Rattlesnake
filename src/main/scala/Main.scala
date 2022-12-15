@@ -319,6 +319,7 @@ object Main {
       )
       reportUnknownArgsIfAny(argsMap)
       val score = verifier.apply(sources)
+      println
       if (score.allPassed) {
         println(s"Program verification succeeded ($score)")
       } else {

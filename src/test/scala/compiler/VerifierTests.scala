@@ -39,6 +39,10 @@ class VerifierTests {
   @Test def euclidWeakFailTest(): Unit = runVerifTest("euclidWeakFail", false)
   @Test def forLoopTest(): Unit = runVerifTest("forloop", true)
   @Test def forLoopFailTest(): Unit = runVerifTest("forLoopFail", false)
+  @Test def minEquivTest(): Unit = runVerifTest("minequiv", true)
+  @Test def minEquivFail1Test(): Unit = runVerifTest("minequivFail1", false)
+  @Test def minEquivFail2Test(): Unit = runVerifTest("minequivFail2", false)
+  @Test def minEquivFail3Test(): Unit = runVerifTest("minequivFail3", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())

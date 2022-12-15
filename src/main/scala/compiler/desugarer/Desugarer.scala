@@ -389,7 +389,7 @@ final class Desugarer(mode: Desugarer.Mode)
           val newLocalRef = VariableRef(uid).setType(retVal.getType)
           val renamedAssertions = {
             rawAssertions
-              .map(_.setPositionSp(retStat.getPosition))
+              .map(_.copy().setPositionSp(retStat.getPosition))
               .map(assertion =>
                 Assertion(
                   formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),

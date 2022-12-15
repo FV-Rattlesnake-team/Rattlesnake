@@ -84,6 +84,7 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         List(new Path.Builder())
       case ReturnStat(optVal) =>
         generatePaths(optVal.toList, pathBuilders)
+        Nil   // drop all paths since they have returned
       case _: (ForLoop | VarModif | PanicStat) => assert(false)
     }
   }
