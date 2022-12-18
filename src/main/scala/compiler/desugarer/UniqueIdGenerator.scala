@@ -1,4 +1,4 @@
-package compiler
+package compiler.desugarer
 
 import java.util.concurrent.atomic.AtomicLong
 
