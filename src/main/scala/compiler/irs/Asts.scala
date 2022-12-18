@@ -400,10 +400,15 @@ object Asts {
    *
    * The `_descr` member of this case class is the initial description, while the `description` method returns
    * the whole description (including the description of the position if it has been set)
-   * FIXME use custom constructor and unapply instead
    */
   final case class Assertion(formulaExpr: Expr, private val _descr: String, isAssumed: Boolean) extends Statement {
     private var posDescr = ""
+
+    /*
+     * I know this design with the descriptions is not intuitive but it is the most robust I found to avoid
+     * duplicating positions in the description (because positions might be set more than once, and it is
+     * hard to make sure that this does not happen)
+     */
 
     def descr: String = _descr ++ posDescr
 
