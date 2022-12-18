@@ -10,6 +10,10 @@ import scala.collection.mutable
 
 object Z3OutputParser {
 
+  /**
+   * @param lines z3 response, line by line
+   * @return an assignment of variables obtained by parsing z3 response, or a failure if parsing failed
+   */
   def parse(lines: List[String]): Try[Map[String, String]] = {
 
     def fail: Try[Map[String, String]] = {

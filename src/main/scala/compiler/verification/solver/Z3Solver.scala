@@ -12,6 +12,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try, Using}
 
+/**
+ * Interface to the Z3 command-line solver
+ * @param outputDir the directory in which z3 input files will be written
+ */
 final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
   private val z3ExecName = "z3"
   private val filenamePrefix = "z3input"
@@ -76,6 +80,7 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
 
       Using(new BufferedReader(new InputStreamReader(process.getInputStream))) { reader =>
 
+        // read all the lines until none is left
         @tailrec def read(prevLinesRev: List[String]): List[String] = {
           val line = reader.readLine()
           if (line != null) {
@@ -85,15 +90,16 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
           }
         }
 
+        // read first line, then if sat read the other lines to try to parse an assignment
         reader.readLine() match {
           case "sat" =>
             Z3OutputParser.parse(read(Nil)) match {
-              case Failure(exception) => Sat(" error: " ++ exception.getMessage)
+              case Failure(exception) => Sat(" error: " ++ exception.getMessage)  // sat but parsing failed
               case Success(assigMap) =>
                 val prefix = if assigMap.isEmpty then "" else "Could not be verified e.g. for: "
-                Sat(
+                Sat(    // sat and assignment to display
                   assigMap
-                    .filter((name, _) => isOriginalVarName(name))
+                    .filter((name, _) => isOriginalVarName(name))   // drop variables obtained by desugaring/renaming
                     .map((name, value) => s"$name == $value")
                     .mkString(prefix, " && ", "")
                 )
@@ -112,6 +118,9 @@ final class Z3Solver(outputDir: java.nio.file.Path) extends Solver {
     }
   }
 
+  /**
+   * @return true if `name` is a variable of the original program, false if it was obtained by renaming/desugaring
+   */
   private def isOriginalVarName(name: String): Boolean = {
     require(name.nonEmpty)
     name.head.isLetter && name.tail.forall(char => char.isLetterOrDigit || char == '_')

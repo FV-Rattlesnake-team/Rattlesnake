@@ -9,9 +9,18 @@ import compiler.Replacer.replaceInExpr
 
 import scala.collection.mutable.ListBuffer
 
+/**
+ * Program path
+ * @param pathElems statements of the path (before the postcondition)
+ * @param formulaToProve postcondition, must be true at the end of the execution of the statements
+ * @param descr description of the path
+ */
 final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr: String) {
   require(formulaToProve.getType == BoolType)
 
+  /**
+   * Integrity check: fails the program if an expression (in a statement or in the postcondition) has not been assigned a type
+   */
   def assertAllTypesAreSet(): Unit = {
     for pathElem <- pathElems do {
       pathElem.assertAllTypesAreSet()
@@ -31,8 +40,17 @@ final case class Path(pathElems: List[PathElement], formulaToProve: Expr, descr:
 
 object Path {
 
+  /**
+   * Statement that can be added to a path
+   */
   type PathElement = Assertion | LocalDef | VarAssig
 
+  /**
+   * Builder for a path
+   * 
+   * `builtWith` has no side effects and a builder can be used to create more than one path
+   * (build a path, then add new statements, and build a longer path)
+   */
   final class Builder() {
     private val stats = ListBuffer.empty[PathElement]
     private val varsCtx = new VarsCtx()
@@ -42,17 +60,31 @@ object Path {
       this
     }
 
+    /**
+     * @return a new builder with all the statements contained in this
+     */
     def copied: Builder = {
       val copy = new Builder()
       copy.stats.addAll(stats)
       copy
     }
 
+    /**
+     * @return a new path with all the statements in this builder and the provided formula and description
+     */
     def builtWith(formulaToProve: Expr, descr: String): Path = {
       require(formulaToProve.getType == BoolType)
       val formulaAfterRenaming = replaceInExpr(formulaToProve, varsCtx.currentRenameMapSnapshot)
       Path(stats.toList, formulaAfterRenaming, descr)
     }
+    
+    /*
+     * The following `removeVars` functions make the path functional by replacing the assignments to variables 
+     * with definitions of new values:
+     *
+     *  var x = 0;    ---->    val x = 0;
+     *  x = 42;                val x%1 = 42;
+     */
 
     private def removeVars(stats: List[Statement]): List[Statement] = {
       stats.map(removeVars)

@@ -9,19 +9,21 @@ import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
 import lang.SoftKeywords.Result
 
-// TODO update outdated doc
 /**
  * Desugaring replaces:
- *  - `>`, `>=` ---> reversed
- *  - `x <= y` ---> `(x < y) || (x == y)`
- *  - `x != y` ---> `!(x == y)`
+ *  - `x <= y` ---> `(x < y) || (x == y)` if x,y are Doubles
+ *  - `x != y` ---> `!(x == y)` if `mode.desugarOperators`
  *  - `VarModif`: `x += y` ---> `x = x + y`
  *  - `for` ---> `while`
- *  - `-x` ---> `0 - x`
- *  - `!x` ---> `when x then false else true`
+ *  - `-x` ---> `0 - x` if `mode.desugarOperators`
+ *  - `!x` ---> `when x then false else true` if `mode.desugarOperators`
  *  - `x && y` ---> `when x then y else false`
  *  - `x || y` ---> `when x then true else y`
  *  - `[x_1, ... , x_n]` ---> `val $0 = arr Int[n]; $0[0] = x_1; ... ; $0[n-1] = x_n; $0`
+ *  - Preconditions ---> assertions at call site and assumptions at the beginning of the body of the function
+ *  - Postconditions ---> assumptions at call site and assertions on each exit point of the function
+ *  - Loop invariants ---> assertions ; loop ; assumptions, with the new body = { assumptions ; old body ; assumptions }
+ *  - Addition of assumptions for control-flow structures: e.g. assume if condition in then branch
  */
 final class Desugarer(mode: Desugarer.Mode)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
@@ -212,9 +214,8 @@ final class Desugarer(mode: Desugarer.Mode)
         else BinaryOp(desugaredLhs, Equality, desugaredRhs)
       }
 
-      case binaryOp@BinaryOp(lhs, operator, rhs) =>
-        if mode.desugarOperators then desugarBinaryOp(binaryOp)
-        else BinaryOp(desugar(lhs), operator, desugar(rhs))
+      case binaryOp: BinaryOp =>
+        desugarBinaryOp(binaryOp)
 
       case select: Select => Select(desugar(select.lhs), select.selected)
 
@@ -242,20 +243,23 @@ final class Desugarer(mode: Desugarer.Mode)
 
   private def desugarBinaryOp(binaryOp: BinaryOp)(implicit ctx: AnalysisContext): Expr = {
     val isDoubleOp = binaryOp.lhs.getType == DoubleType || binaryOp.rhs.getType == DoubleType
+    // always desugar && and || because of lazy evaluation
     binaryOp.operator match {
 
       // x <= y ---> x <= y || x == y
-      case LessOrEq if isDoubleOp =>
+      case LessOrEq if isDoubleOp && mode.desugarOperators =>
         makeDoubleCompOrEq(desugar(binaryOp.lhs), LessThan, desugar(binaryOp.rhs))
 
-      case GreaterOrEq if isDoubleOp =>
+      case GreaterOrEq if isDoubleOp && mode.desugarOperators =>
         makeDoubleCompOrEq(desugar(binaryOp.lhs), GreaterThan, desugar(binaryOp.rhs))
 
       // x != y ---> !(x == y)
-      case Inequality =>
+      case Inequality if mode.desugarOperators =>
         desugar(UnaryOp(ExclamationMark,
           BinaryOp(binaryOp.lhs, Equality, binaryOp.rhs).setType(BoolType)
         ).setType(BoolType))
+
+      // TODO for performance it might be better to avoid desugaring && and || into ternary when running verification if the second operand has no side effect
 
       // x && y ---> when x then y else false
       case And => desugar(Ternary(binaryOp.lhs, binaryOp.rhs, BoolLit(false)))

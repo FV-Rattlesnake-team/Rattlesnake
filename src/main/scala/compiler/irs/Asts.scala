@@ -392,6 +392,16 @@ object Asts {
     }
   }
 
+  /**
+   * Assertion or assumption
+   * @param formulaExpr the asserted/assumed formula
+   * @param _descr description
+   * @param isAssumed whether this formula must be proven (assertion) or can be assumed (assumption)
+   *
+   * The `_descr` member of this case class is the initial description, while the `description` method returns
+   * the whole description (including the description of the position if it has been set)
+   * FIXME use custom constructor and unapply instead
+   */
   final case class Assertion(formulaExpr: Expr, private val _descr: String, isAssumed: Boolean) extends Statement {
     private var posDescr = ""
 

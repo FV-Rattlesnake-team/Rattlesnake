@@ -9,6 +9,9 @@ import compiler.verification.Path.PathElement
 
 import scala.collection.mutable.ListBuffer
 
+/**
+ * Transforms a program into a list of all its paths that must be considered for verification
+ */
 final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
@@ -28,10 +31,18 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
         }
     }
     val res = paths.toList
+    // integrity check
     res.foreach(_.assertAllTypesAreSet())
     res
   }
 
+  /**
+   * Let all the pathBuilders traverse `statement`
+   * @param statement statement to be considered
+   * @param pathBuilders initial pathBuilders
+   * @param paths paths buffer to be updated if verification conditions are generated during the traversal of `statement`
+   * @return the pathBuilders that are active at the end of the traversal (<b>may not be the same as at the beginning</b>)
+   */
   private def generatePaths(
                              statement: Statement,
                              pathBuilders: List[Path.Builder]
@@ -92,6 +103,13 @@ final class PathsGenerator extends CompilerStep[(List[Source], AnalysisContext),
     }
   }
 
+  /**
+   * Let the pathBuilders traverse all statements one after the other
+   * 
+   * The number of pathBuilders traversing the statements may vary during the traversal of the list of statements
+   * 
+   * @return all the pathBuilders that reached the end of the last statement
+   */
   private def generatePaths(
                              statements: List[Statement],
                              pathBuilders: List[Path.Builder]
