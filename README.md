@@ -25,6 +25,8 @@ fn main(args: arr String){
 
 [Compiler documentation here](CompilerDoc.md)
 
+[Variables renaming documentation here](Renaming.md)
+
 ## Command-line program
 
 Run help to see the available commands and options
@@ -197,6 +199,11 @@ while x < 20 && y < 100 invar x < y {
 }
 ```
 
+#### Ignore a function
+A function will be ignored during verification if it is annotated with the `unchecked` keyword, e.g.:
+```
+fn main(args: arr String) unchecked -> Void
+```
 
 ## Built-in functions
 
