@@ -259,13 +259,13 @@ final class Desugarer(mode: Desugarer.Mode)
           BinaryOp(binaryOp.lhs, Equality, binaryOp.rhs).setType(BoolType)
         ).setType(BoolType))
 
-      // TODO for performance it might be better to avoid desugaring && and || into ternary when running verification if the second operand has no side effect
-
       // x && y ---> when x then y else false
-      case And => desugar(Ternary(binaryOp.lhs, binaryOp.rhs, BoolLit(false)))
+      case And if mode.desugarOperators || !FunctionalChecker.isPurelyFunctional(binaryOp.rhs) =>
+        desugar(Ternary(binaryOp.lhs, binaryOp.rhs, BoolLit(false)))
 
       // x || y ---> when x then true else y
-      case Or => desugar(Ternary(binaryOp.lhs, BoolLit(true), binaryOp.rhs))
+      case Or if mode.desugarOperators || !FunctionalChecker.isPurelyFunctional(binaryOp.rhs) =>
+        desugar(Ternary(binaryOp.lhs, BoolLit(true), binaryOp.rhs))
 
       // nothing to desugar at top-level, only perform recursive calls
       case _ => BinaryOp(desugar(binaryOp.lhs), binaryOp.operator, desugar(binaryOp.rhs))

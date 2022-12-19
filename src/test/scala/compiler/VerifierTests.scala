@@ -46,8 +46,11 @@ class VerifierTests {
   @Test def minEquivFail3Test(): Unit = runVerifTest("minequivFail3", false)
   @Test def uncheckedTest(): Unit = runVerifTest("unchecked", true)
   @Test def uncheckedFailTest(): Unit = runVerifTest("uncheckedFail", false)
+  @Test def avgTest(): Unit = runVerifTest("avg", true)
+  @Test def avgFailTest(): Unit = runVerifTest("avgFail", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
+    // TODO fail test if timeout occurs
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())
     val path = s"$resDirPath/$filename.${FileExtensions.rattlesnake}"
     val actualRes = pipeline.apply(List(SourceFile(path))).allPassed
