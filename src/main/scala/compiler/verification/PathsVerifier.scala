@@ -93,7 +93,7 @@ final class PathsVerifier(
     val errorFlag = new ErrorFlag()
     val additionalVarsBuffer = ListBuffer.empty[(String, Type)]
     val additionalFormulasBuffer = ListBuffer.empty[Term]
-    val assumedFormulas = stats.flatMap(generateFormulas(_)(errorReporter, errorFlag, additionalVarsBuffer, additionalFormulasBuffer))
+    val assumedFormulas = stats.map(generateFormula(_)(errorReporter, errorFlag, additionalVarsBuffer, additionalFormulasBuffer))
     val convertedFormulaToProve = transformExpr(formulaToProve)(errorReporter, errorFlag, additionalVarsBuffer, additionalFormulasBuffer)
     if (errorFlag.isSet) {
       Solver.Error("solver error")
@@ -140,42 +140,20 @@ final class PathsVerifier(
    * Propagates implicit arguments that are used by `transformExpr`, especially `additVarsBuffer` and `additFormulasBuffer`, 
    * 2 path-wide mutable lists in which `transformExpr` writes additional formulas and variables
    */
-  private def generateFormulas(statement: Statement)(
+  private def generateFormula(pathElement: Path.PathElement)(
     implicit errorReporter: ErrorReporter,
     errorFlag: ErrorFlag,
     additVarsBuffer: ListBuffer[(String, Type)],
     additFormulasBuffer: ListBuffer[Term]
-  ): List[Term] = {
-
-    extension (term: Term) def toSingletonList: List[Term] = List(term)
-
-    statement match
-      case _: Asts.Literal => Nil
-      case _: VariableRef => Nil
-      case _: Call => Nil
-      case _: Indexing => Nil
-      case _: ArrayInit =>
-        reportUnsupported("array initialization", statement.getPosition)
-      case _: FilledArrayInit =>
-        reportUnsupported("array initialization", statement.getPosition)
-      case _: StructInit =>
-        reportUnsupported("struct initialization", statement.getPosition)
-      case _: UnaryOp => Nil
-      case _: BinaryOp => Nil
-      case _: Select => Nil
-      case Ternary(cond, thenBr, elseBr) =>
-        generateFormulas(cond) ++ generateFormulas(thenBr) ++ generateFormulas(elseBr)
-      case _: Cast => Nil
-      case Sequence(_, exprOpt) =>
-        exprOpt.flatMap(generateFormulas).toList
-      case Block(stats) =>
-        stats.flatMap(generateFormulas)
+  ): Term = {
+    pathElement match
       case LocalDef(localName, _, rhs, _) =>
-        Equals(qid(localName), transformExpr(rhs)).toSingletonList
+        Equals(qid(localName), transformExpr(rhs))
       case Assertion(formulaExpr, _, _) => // assumed in this path since it appears in the path
-        transformExpr(formulaExpr).toSingletonList
-      case _: (VarAssig | VarModif | ForLoop | ReturnStat | IfThenElse | WhileLoop | PanicStat) =>
-        throw new AssertionError(s"unexpected $statement")
+        transformExpr(formulaExpr)
+      case VarAssig(lhs, rhs) =>
+        // may need to be handled more carefully when implementing arrays
+        Equals(transformExpr(lhs), transformExpr(rhs))
   }
 
   /**
