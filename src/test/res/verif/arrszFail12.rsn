@@ -33,7 +33,7 @@ fn main(args: arr String){
         if i % 2 == 0 {
             x = a;
         } else {
-            x = when i % 5 == 0 then c else a;
+            x = when i % 3 == 0 then c else a;
         };
     };
 

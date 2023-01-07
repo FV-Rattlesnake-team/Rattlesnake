@@ -29,7 +29,7 @@ fn main(args: arr String){
     val c = [0];
 
     for var i = 0; i < #a; i += 1 invar i >= 0 invar #a + 10 < #b invar x == a || x == b invar #a == 5 {
-        a[i] = x[i] + b[i+10];
+        a[i] = x[i] + b[i+23];
         if i % 2 == 0 {
             x = a;
         } else {

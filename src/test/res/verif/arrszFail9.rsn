@@ -24,7 +24,7 @@ fn main(args: arr String){
     var x = a;
     assert 5 == #x;
     x = b;
-    assert #x == #b;
+    assert #x == #a;
 
     val c = [0];
 

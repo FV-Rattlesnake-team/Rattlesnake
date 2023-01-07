@@ -8,7 +8,7 @@ fn min(a: Int, b: Int) -> Int {
 }
 
 fn maxAtIndex(a: arr Int, b: arr Int, idx: Int) -> Int require 0 <= idx && idx < min(#a, #b) {
-    return max(a[idx], b[idx])
+    return max(a[idx], b[idx+idx])
 }
 
 fn main(args: arr String){

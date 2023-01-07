@@ -16,7 +16,7 @@ fn main(args: arr String){
     val a = [11, -5, 14, 21, 27];
     val b = arr Int[27];
 
-    assert #a == 5;
+    assert #a == 4;
     assert #b == 27;
 
     print(intToString(maxAtIndex(a, b, 3)));

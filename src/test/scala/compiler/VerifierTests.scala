@@ -48,6 +48,31 @@ class VerifierTests {
   @Test def uncheckedFailTest(): Unit = runVerifTest("uncheckedFail", false)
   @Test def avgTest(): Unit = runVerifTest("avg", true)
   @Test def avgFailTest(): Unit = runVerifTest("avgFail", false)
+  @Test def arraySzTest(): Unit = runVerifTest("arrsz", true)
+
+  @Test def arraySzFail1Test(): Unit = runVerifTest("arrszFail1", false)
+
+  @Test def arraySzFail2Test(): Unit = runVerifTest("arrszFail2", false)
+
+  @Test def arraySzFail3Test(): Unit = runVerifTest("arrszFail3", false)
+
+  @Test def arraySzFail4Test(): Unit = runVerifTest("arrszFail4", false)
+
+  @Test def arraySzFail5Test(): Unit = runVerifTest("arrszFail5", false)
+
+  @Test def arraySzFail6Test(): Unit = runVerifTest("arrszFail6", false)
+
+  @Test def arraySzFail7Test(): Unit = runVerifTest("arrszFail7", false)
+
+  @Test def arraySzFail8Test(): Unit = runVerifTest("arrszFail8", false)
+
+  @Test def arraySzFail9Test(): Unit = runVerifTest("arrszFail9", false)
+
+  @Test def arraySzFail10Test(): Unit = runVerifTest("arrszFail10", false)
+
+  @Test def arraySzFail11Test(): Unit = runVerifTest("arrszFail11", false)
+
+  @Test def arraySzFail12Test(): Unit = runVerifTest("arrszFail12", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     // TODO fail test if timeout occurs

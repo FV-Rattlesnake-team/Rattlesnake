@@ -22,7 +22,7 @@ fn main(args: arr String){
     print(intToString(maxAtIndex(a, b, 3)));
 
     var x = a;
-    assert 5 == #x;
+    assert 6 == #x;
     x = b;
     assert #x == #b;
 

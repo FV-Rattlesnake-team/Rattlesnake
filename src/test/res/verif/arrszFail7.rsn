@@ -19,7 +19,7 @@ fn main(args: arr String){
     assert #a == 5;
     assert #b == 27;
 
-    print(intToString(maxAtIndex(a, b, 3)));
+    print(intToString(maxAtIndex(a, b, 27)));
 
     var x = a;
     assert 5 == #x;
