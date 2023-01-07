@@ -51,6 +51,18 @@ final class PathsVerifier(
     uniqueRefAtomicInt.incrementAndGet()
   }
 
+  /**
+   * forall x  #x >= 0
+   */
+  private val arrayLengthTautology = {
+    val x = "x"
+    Forall(
+      SortedVar(SSymbol(x), Sort(Identifier(SSymbol(refTypePlaceholderTypeName)))),
+      Nil,
+      Ints.GreaterEquals(sharpOf(qid(x)), Ints.NumeralLit(0))
+    )
+  }
+
   override def apply(paths: List[Path]): Score = {
     solver.initialize()
     var correctCnt = 0
@@ -112,7 +124,7 @@ final class PathsVerifier(
         (vars ++ additionalVarsBuffer)
           .map((name, tpe) => DeclareConst(SSymbol(name), convertType(tpe)(errorReporter, errorFlag)))
       }
-      val allAssumpt = assumedFormulas ++ additionalFormulasBuffer
+      val allAssumpt = List(arrayLengthTautology) ++ assumedFormulas ++ additionalFormulasBuffer
       val assumptFormula = {
         allAssumpt match
           case Nil => True()

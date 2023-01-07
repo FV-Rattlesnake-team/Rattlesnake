@@ -73,6 +73,14 @@ class VerifierTests {
   @Test def arraySzFail11Test(): Unit = runVerifTest("arrszFail11", false)
 
   @Test def arraySzFail12Test(): Unit = runVerifTest("arrszFail12", false)
+  @Test def elem10Test(): Unit = runVerifTest("elem10", true)
+  @Test def elem10Fail1Test(): Unit = runVerifTest("elem10Fail1", false)
+  @Test def elem10Fail2Test(): Unit = runVerifTest("elem10Fail2", false)
+  @Test def elem10Fail3Test(): Unit = runVerifTest("elem10Fail3", false)
+  @Test def concatTest(): Unit = runVerifTest("concat", true)
+  @Test def concatFail1Test(): Unit = runVerifTest("concatFail1", false)
+  @Test def concatFail2Test(): Unit = runVerifTest("concatFail2", false)
+  @Test def concatFail3Test(): Unit = runVerifTest("concatFail3", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     // TODO fail test if timeout occurs
