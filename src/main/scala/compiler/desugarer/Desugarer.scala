@@ -131,7 +131,19 @@ final class Desugarer(mode: Desugarer.Mode)
     val desugared = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
-      case indexing: Indexing => Indexing(desugar(indexing.indexed), desugar(indexing.arg))
+      case indexing: Indexing =>
+        Sequence(List(
+          Assertion(desugar(BinaryOp(
+            BinaryOp(IntLit(0), LessOrEq, indexing.arg).setType(BoolType),
+            And,
+            BinaryOp(indexing.arg, LessThan, UnaryOp(Sharp, indexing.indexed).setType(IntType)).setType(BoolType)
+          ).setType(BoolType)),
+            "array access ",
+            isAssumed = false
+          ).setPositionSp(indexing.getPosition)
+        ), Some(
+          Indexing(desugar(indexing.indexed), desugar(indexing.arg)).setType(indexing.getType)
+        ))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
 
@@ -195,10 +207,10 @@ final class Desugarer(mode: Desugarer.Mode)
         val arrValRef = VariableRef(arrValId).setType(arrayType)
         val arrInit = ArrayInit(elemType, IntLit(arrayElems.size)).setType(filledArrayInit.getType)
         val arrayValDefinition = LocalDef(arrValId, Some(arrayType), arrInit, isReassignable = false)
-        val arrElemAssigStats = arrayElems.zipWithIndex.map {
-          (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
+        val arrElemAssigStats = arrayElems.map(desugar).zipWithIndex.map {
+          (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(arrayType.elemType), elem)
         }
-        Sequence(desugar(arrayValDefinition) :: arrElemAssigStats.map(desugar), Some(desugar(arrValRef)))
+        Sequence(desugar(arrayValDefinition) :: arrElemAssigStats, Some(desugar(arrValRef)))
 
       case unaryOp@UnaryOp(operator, operand) =>
         if mode.desugarOperators then desugarUnaryOp(unaryOp)
@@ -356,7 +368,8 @@ final class Desugarer(mode: Desugarer.Mode)
         case literal: Literal => literal
         case variableRef: VariableRef => variableRef
         case Call(callee, args) => Call(callee, args.map(addAssertsOnRetVals))
-        case Indexing(indexed, arg) => Indexing(addAssertsOnRetVals(indexed), addAssertsOnRetVals(arg))
+        case Indexing(indexed, arg) =>
+          Indexing(addAssertsOnRetVals(indexed), addAssertsOnRetVals(arg)).setPositionSp(stat.getPosition)
         case ArrayInit(elemType, size) => ArrayInit(elemType, addAssertsOnRetVals(size))
         case FilledArrayInit(arrayElems) => FilledArrayInit(arrayElems.map(addAssertsOnRetVals))
         case StructInit(structName, args) => StructInit(structName, args.map(addAssertsOnRetVals))

@@ -6,6 +6,8 @@ import compiler.irs.Asts.*
 import compiler.prettyprinter.PrettyPrinter
 import compiler.verification.Path
 import compiler.verification.Path.PathElement
+import lang.Operator.{And, LessOrEq, LessThan, Sharp}
+import lang.Types.PrimitiveType.{BoolType, IntType}
 
 import scala.collection.mutable.ListBuffer
 

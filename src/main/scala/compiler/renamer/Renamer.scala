@@ -11,7 +11,8 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisCtx) = input
     val globalVarsCtx = new GlobalVarsCtx()
-    (sources.map(rename(_, globalVarsCtx)), analysisCtx)
+    val renamedSources = sources.map(rename(_, globalVarsCtx))
+    (renamedSources, analysisCtx)
   }
 
   private def rename(src: Source, globalVarsCtx: GlobalVarsCtx): Source = {
@@ -99,7 +100,7 @@ final class Renamer() extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case PanicStat(msg) =>
         PanicStat(rename(msg, ctx))
       case Assertion(formulaExpr, descr, isAssumed) =>
-        Assertion(rename(formulaExpr, ctx), descr, isAssumed)
+        Assertion(rename(formulaExpr, ctx), descr, isAssumed).setPositionSp(statement.getPosition)
       case _: (VarModif | ForLoop) => assert(false)
   }
 

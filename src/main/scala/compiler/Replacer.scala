@@ -19,7 +19,7 @@ object Replacer {
       case Call(callee, args) =>
         Call(callee, args.map(replaceInExprImpl))
       case Indexing(indexed, arg) =>
-        Indexing(replaceInExprImpl(indexed), replaceInExprImpl(arg))
+        Indexing(replaceInExprImpl(indexed), replaceInExprImpl(arg)).setPositionSp(expr.getPosition)
       case ArrayInit(elemType, size) =>
         ArrayInit(elemType, replaceInExprImpl(size))
       case FilledArrayInit(arrayElems) =>

@@ -16,7 +16,7 @@ import smtlib.theories.Core.{BoolSort, Equals, False, Implies, Not, True}
 import smtlib.theories.{Core, Ints}
 import smtlib.theories.Ints.IntSort
 import smtlib.trees.Terms.*
-import smtlib.trees.Commands.{CheckSatAssuming, Command, DeclareConst, PropLiteral, Script, Assert as AssertCmd}
+import smtlib.trees.Commands.{CheckSatAssuming, Command, Constructor, DeclareConst, DeclareDatatypes, DeclareFun, PropLiteral, Script, Assert as AssertCmd}
 
 import java.util.concurrent.atomic.AtomicInteger
 import scala.annotation.tailrec
@@ -36,10 +36,19 @@ final class PathsVerifier(
                            logger: String => Unit
                          ) extends CompilerStep[List[Path], Score] {
 
-  private val atomicIntUid = new AtomicInteger(0)
+  private val sharpOperatorFunName = s"${lang.Keyword.Arr}::#"
+  private def sharpOf(t: Term): FunctionApplication = FunctionApplication(qid(sharpOperatorFunName), List(t))
 
+  private val refTypePlaceholderTypeName = "ref~unchecked"
+
+  private val atomicIntUid = new AtomicInteger(0)
   private def nextNameForNewVar(): String = {
     "%" ++ atomicIntUid.incrementAndGet().toString
+  }
+
+  private val uniqueRefAtomicInt = new AtomicInteger(0)
+  private def nextUniqueRef(): Int = {
+    uniqueRefAtomicInt.incrementAndGet()
   }
 
   override def apply(paths: List[Path]): Score = {
@@ -114,7 +123,16 @@ final class PathsVerifier(
         assumptFormula,
         convertedFormulaToProve
       )
-      val script = Script(varsDecls :+ AssertCmd(Not(implication)))
+      val sharpFunDecl = DeclareFun(
+        SSymbol(sharpOperatorFunName),
+        List(Sort(Identifier(SSymbol(refTypePlaceholderTypeName)))),
+        Ints.IntSort()
+      )
+      val arrDtDecl = DeclareDatatypes(List(
+        // uid so that all arrays are considered not equals to each other
+        (SSymbol(refTypePlaceholderTypeName), List(Constructor(SSymbol(refTypePlaceholderTypeName), List((SSymbol("uid"), Ints.IntSort())))))
+      ))
+      val script = Script((arrDtDecl :: sharpFunDecl :: varsDecls) :+ AssertCmd(Not(implication)))
       solver.check(script, timeoutSec, s"target: $descr\n\n$path", idx)
     }
   }
@@ -147,8 +165,16 @@ final class PathsVerifier(
     additFormulasBuffer: ListBuffer[Term]
   ): Term = {
     pathElement match
-      case LocalDef(localName, _, rhs, _) =>
-        Equals(qid(localName), transformExpr(rhs))
+      case LocalDef(localName, _, rhs, _) => {
+        val basicFormula = Equals(qid(localName), transformExpr(rhs))
+        rhs match {
+          case ArrayInit(_, size) =>
+            Core.And(basicFormula, Equals(sharpOf(qid(localName)), transformExpr(size)))
+          case FilledArrayInit(arrayElems) =>
+            Core.And(basicFormula, Equals(sharpOf(qid(localName)), Ints.NumeralLit(arrayElems.size)))
+          case _ => basicFormula
+        }
+      }
       case Assertion(formulaExpr, _, _) => // assumed in this path since it appears in the path
         transformExpr(formulaExpr)
       case VarAssig(lhs, rhs) =>
@@ -176,6 +202,17 @@ final class PathsVerifier(
     additVarsBuffer: ListBuffer[(String, Type)],
     additFormulasBuffer: ListBuffer[Term]
   ): Term = {
+
+    def wildcardVarOrUniqueRef(varTpe: Type): Term = {
+      varTpe match
+        case _: (StructType | ArrayType) =>
+          FunctionApplication(qid(refTypePlaceholderTypeName), List(Ints.NumeralLit(nextUniqueRef())))
+        case _ =>
+          val newVarName = nextNameForNewVar()
+          additVarsBuffer.addOne(newVarName -> varTpe)
+          qid(newVarName)
+    }
+
     if (expr.getType.subtypeOf(NothingType)) {
       reportUnsupported(s"expression with return type $NothingType", expr.getPosition)
     } else {
@@ -195,25 +232,23 @@ final class PathsVerifier(
         case VariableRef(name) =>
           qid(name)
         case call: Call =>
-          val newVarName = nextNameForNewVar()
-          additVarsBuffer.addOne(newVarName -> call.getType)
-          qid(newVarName)  // variable with no constraint, since there is no postcondition
+          wildcardVarOrUniqueRef(call.getType)  // variable with no constraint, since there is no postcondition
         case indexing@Indexing(_, _) =>
-          reportUnsupported("array indexing", indexing.getPosition)
+          wildcardVarOrUniqueRef(indexing.getType)
         case arrInit@ArrayInit(_, _) =>
-          reportUnsupported("array initialization", arrInit.getPosition)
+          wildcardVarOrUniqueRef(arrInit.getType)
         case arrInit@FilledArrayInit(_) =>
-          reportUnsupported("array initialization", arrInit.getPosition)
+          wildcardVarOrUniqueRef(arrInit.getType)
         case structInit@StructInit(_, _) =>
-          reportUnsupported("struct initialization", structInit.getPosition)
+          wildcardVarOrUniqueRef(structInit.getType)
         case UnaryOp(ExclamationMark, operand) =>
           Not(transformExpr(operand))
         case UnaryOp(Minus, operand) if operand.getType.subtypeOf(IntType) =>
           Ints.Neg(transformExpr(operand))
         case unOp@UnaryOp(Minus, operand) if operand.getType.subtypeOf(DoubleType) =>
           reportUnsupported(DoubleType.str, unOp.getPosition)
-        case unOp@UnaryOp(Sharp, _) =>
-          reportUnsupported(s"${Sharp.str}", unOp.getPosition)
+        case UnaryOp(Sharp, operand) =>
+          FunctionApplication(qid(sharpOperatorFunName), List(transformExpr(operand)))
         case unaryOp: UnaryOp =>
           throw new AssertionError(s"unexpected: $unaryOp")
         case binOp@BinaryOp(lhs, operator, rhs) => {
@@ -271,7 +306,7 @@ final class PathsVerifier(
       case StructType(_) =>
         reportUnsupported(tpe.toString, None)
       case ArrayType(_) =>
-        reportUnsupported(tpe.toString, None)
+        Sort(Identifier(SSymbol(refTypePlaceholderTypeName)))
       case VoidType =>
         assert(false)
       case NothingType =>

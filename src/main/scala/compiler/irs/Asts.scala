@@ -225,6 +225,11 @@ object Asts {
   final case class Indexing(indexed: Expr, arg: Expr) extends Expr {
     
     override def children: List[Ast] = List(indexed, arg)
+
+    def setPositionSp(posOpt: Option[Position]): Indexing = {
+      setPosition(posOpt)
+      this
+    }
   }
 
   /**

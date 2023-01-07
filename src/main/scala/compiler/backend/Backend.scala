@@ -332,7 +332,11 @@ final class Backend[V <: ClassVisitor](
             val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
             mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName, fieldName, descriptorForType(rhs.getType))
 
-          case _ => shouldNotHappen()
+          case Sequence(stats, Some(indexing: Indexing)) =>
+            val newCtx = generateSequence(ctx, stats, optFinalExpr = None)
+            generateCode(VarAssig(indexing, rhs), newCtx)
+
+          case _ => throw new AssertionError(s"unexpected $lhs as LHS of var assignment")
         }
 
       case IfThenElse(cond, thenBr, elseBrOpt) =>
@@ -425,7 +429,7 @@ final class Backend[V <: ClassVisitor](
 
   private def generateSequence(
                                 ctx: CodeGenerationContext, stats: List[Statement], optFinalExpr: Option[Expr]
-                              )(implicit mv: MethodVisitor, outputName: String): Unit = {
+                              )(implicit mv: MethodVisitor, outputName: String): CodeGenerationContext = {
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
@@ -434,6 +438,7 @@ final class Backend[V <: ClassVisitor](
       generateCode(finalExpr, newCtx)
       // do not drop that value since it is the resulting value of the sequence
     }
+    newCtx
   }
 
   private def generateIfThenElse(
