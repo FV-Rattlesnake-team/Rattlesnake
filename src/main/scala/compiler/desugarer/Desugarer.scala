@@ -131,19 +131,25 @@ final class Desugarer(mode: Desugarer.Mode)
     val desugared = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
-      case indexing: Indexing =>
-        Sequence(List(
-          Assertion(desugar(BinaryOp(
-            BinaryOp(IntLit(0), LessOrEq, indexing.arg).setType(BoolType),
-            And,
-            BinaryOp(indexing.arg, LessThan, UnaryOp(Sharp, indexing.indexed).setType(IntType)).setType(BoolType)
-          ).setType(BoolType)),
-            "array access ",
-            isAssumed = false
-          ).setPositionSp(indexing.getPosition)
-        ), Some(
-          Indexing(desugar(indexing.indexed), desugar(indexing.arg)).setType(indexing.getType)
-        ))
+
+      case indexing: Indexing => {
+        val desugaredIndexing = Indexing(desugar(indexing.indexed), desugar(indexing.arg)).setType(indexing.getType)
+        if (mode.checkArrayAccesses) {
+          Sequence(List(
+            Assertion(desugar(BinaryOp(
+              BinaryOp(IntLit(0), LessOrEq, indexing.arg).setType(BoolType),
+              And,
+              BinaryOp(indexing.arg, LessThan, UnaryOp(Sharp, indexing.indexed).setType(IntType)).setType(BoolType)
+            ).setType(BoolType)),
+              "array access ",
+              isAssumed = false
+            ).setPositionSp(indexing.getPosition)
+          ), Some(desugaredIndexing))
+        } else {
+          desugaredIndexing
+        }
+      }
+
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
 
@@ -463,17 +469,20 @@ object Desugarer {
   enum Mode(
              val desugarOperators: Boolean,
              val desugarStringEq: Boolean,
-             val desugarPanic: Boolean
+             val desugarPanic: Boolean,
+             val checkArrayAccesses: Boolean
            ) {
     case Compile extends Mode(
       desugarOperators = true,
       desugarStringEq = true,
-      desugarPanic = false
+      desugarPanic = false,
+      checkArrayAccesses = false
     )
     case Verify extends Mode(
       desugarOperators = false,
       desugarStringEq = false,
-      desugarPanic = true
+      desugarPanic = true,
+      checkArrayAccesses = true
     )
   }
 
