@@ -51,9 +51,8 @@ object Path {
    * `builtWith` has no side effects and a builder can be used to create more than one path
    * (build a path, then add new statements, and build a longer path)
    */
-  final class Builder() {
+  final class Builder(varsCtx: VarsCtx = new VarsCtx()) {
     private val stats = ListBuffer.empty[PathElement]
-    private val varsCtx = new VarsCtx()
 
     def addPathElem(elem: PathElement): Builder = {
       stats.addOne(removeVars(elem))
@@ -64,7 +63,7 @@ object Path {
      * @return a new builder with all the statements contained in this
      */
     def copied: Builder = {
-      val copy = new Builder()
+      val copy = new Builder(varsCtx.copied)
       copy.stats.addAll(stats)
       copy
     }
