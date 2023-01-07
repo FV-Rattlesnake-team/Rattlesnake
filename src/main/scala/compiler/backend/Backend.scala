@@ -255,7 +255,7 @@ final class Backend[V <: ClassVisitor](
            */
           val trueLabel = new Label()
           val endLabel = new Label()
-          val opcode = if tpe.isInstanceOf[StructType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
+          val opcode = if tpe.isInstanceOf[StructType] || tpe.isInstanceOf[ArrayType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
           mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
