@@ -23,13 +23,15 @@ fn main(args: arr String){
 
 ```
 
-[Compiler documentation here](CompilerDoc.md)
+[Section on verification](#verification)
 
-[Variables renaming documentation here](Renaming.md)
+[Compiler documentation](CompilerDoc.md)
+
+[Variables renaming documentation](Renaming.md)
 
 ## Command-line program
 
-Run help to see the available commands and options
+Run `help` to see the available commands and options
 
 ## Language description
 
@@ -204,6 +206,23 @@ A function will be ignored during verification if it is annotated with the `unch
 ```
 fn main(args: arr String) unchecked -> Void
 ```
+
+#### Notes on using the verifier
+
+- The verifier does not check termination. Precisely, it checks partial correctness: if the function terminates, then it satisfies the specification. In some cases, obviously wrong functions might therefore be successfully verified because they don't terminate, e.g.:
+
+```
+fn min(a: Int, b: Int) -> Int {
+    return min(a, b)
+}
+ensure (result == a || result == b)
+ensure result <= a
+ensure result <= b
+```
+
+- In some cases, the verification of formulas relies on the correctness of other formulas that occur before them in the program. As a result, it can happen that an invalid formula is successfully verified if a formula asserted before it is invalid;
+
+- When a formula is found to be invalid, the verifier tries to output an assignment of variables that makes the formula false. This messages are meant to help the user figure out why verification fails, but they can be difficult to read, especially when (mutable) variables are involved. The best way to use them is to look for the values that are impossible. E.g. if the variables assignment contains `x == -1` but it is obvious from the program that x is never negative, this probably means that `x >= 0` should be added as an invariant or precondition or postcondition.
 
 ## Built-in functions
 
