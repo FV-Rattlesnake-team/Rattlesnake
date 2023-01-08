@@ -230,7 +230,7 @@ ensure result <= b
 
 - When a formula is found to be invalid, the verifier tries to output an assignment of variables that makes the formula false. This messages are meant to help the user figure out why verification fails, but they can be difficult to read, especially when (mutable) variables are involved. The best way to use them is to look for the values that are impossible. E.g. if the variables assignment contains `x == -1` but it is obvious from the program that x is never negative, this probably means that `x >= 0` should be added as an invariant or precondition or postcondition;
 
-- Some example programs can be found in the [examples](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/examples) folder. More examples (including some where verification finds bugs) can be found in the [test/res/verif](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/src/test/res/verif) folder.
+- Some example programs can be found in the [examples](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/examples) folder. More examples (including some where verification finds bugs) can be found in the [test/res/verif](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/src/test/res/verif) folder (the buggy/failing examples are the one whose name contains "fail").
 
 ## Built-in functions
 
@@ -244,5 +244,7 @@ The compiler replaces calls to these functions with special instructions.
 
 Lexer and parser are inspired from https://github.com/epfl-lara/silex and https://github.com/epfl-lara/scallion, respectively.
 
-Backend uses the ASM bytecode manipulation library: https://asm.ow2.io/
+Backend uses the ASM bytecode manipulation library (https://asm.ow2.io/).
+
+Verifier uses Z3 (https://github.com/Z3Prover/z3) and Scala SMT-lib (https://github.com/epfl-lara/scala-smtlib).
 
