@@ -23,15 +23,11 @@ fn main(args: arr String){
 
 ```
 
-[Section on verification](#verification)
+[Instructions for running the verifier](#notes-on-using-the-verifier)
 
 [Compiler documentation](CompilerDoc.md)
 
 [Variables renaming documentation](Renaming.md)
-
-## Dependencies
-
-Before verifying programs, make sure that z3 is installed and callable from the compiler. We tested it using z3 4.11.2.
 
 ## Command-line program
 
@@ -213,7 +209,13 @@ fn main(args: arr String) unchecked -> Void
 
 #### Notes on using the verifier
 
-- The verifier does not check termination. Precisely, it checks partial correctness: if the function terminates, then it satisfies the specification. In some cases, obviously wrong functions might therefore be successfully verified because they don't terminate, e.g.:
+- Before verifying programs, make sure that z3 is installed and callable from the compiler. We tested it using z3 4.11.2, other versions might work as well but produce errors like "unable to parse z3 response" when an assertion does not hold (uncertain);
+
+- Command for verifying a file: `verify -out-dir=<directory for smt files> <path to source file>` (this is the command for the Rattlesnake compiler, if the program is run from sbt this command must be given as a program argument).
+
+    E.g. `verify -out-dir=testout src/test/res/verif/fibonacci1.rsn`;
+
+- The verifier does not check termination. Precisely, it checks partial correctness: if the function terminates, then it must satisfy its specification. In some cases, obviously wrong functions might therefore be successfully verified because they don't terminate, e.g.:
 
 ```
 fn min(a: Int, b: Int) -> Int {
