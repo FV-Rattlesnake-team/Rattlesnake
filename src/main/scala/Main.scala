@@ -353,7 +353,7 @@ object Main {
     println(
       s"""
         |Command: <cmd> [<arg>*] <file>*
-        |   e.g. run -out-dir=output examples/sorting.rsn
+        |   e.g. run -out-dir=output examples/hello.rsn
         |
         |run: compile and run the program
         | args: -out-dir=...: required, directory where to write the output file
