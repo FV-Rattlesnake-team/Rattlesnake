@@ -400,7 +400,7 @@ final class Desugarer(mode: Desugarer.Mode)
                   formulaExpr = Replacer.replaceInExpr(assertion.formulaExpr, Map(Result.str -> newLocalRef)),
                   "postcond " ++ assertion.descr,
                   isAssumed = false
-                ).setPositionSp(retStat.getPosition)
+                )
               )
           }
           blockify(
