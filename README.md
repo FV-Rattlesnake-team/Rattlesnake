@@ -4,21 +4,22 @@ Statically typed imperative toy programming language, compiled to the JVM
 
 ## Example program
 ```
-fn joinWords(words: arr String, endSymbol: Char) -> String {
-    var joined = "";
-    for var i = 0; i < #words; i += 1 {
-        joined += words[i];
-        if i < #words-1 {
-            joined += " ";
-        }
+fn fib(n: Int) -> Int require n >= 0 {
+    if n <= 1 {
+        return n;
     };
-    return joined + charToString(endSymbol)
-}
+    var prev = 0;
+    var curr = 1;
+    for var i = 2; i <= n; i += 1 invar curr > 0 invar prev >= 0 {
+        val next = prev + curr;
+        prev = curr;
+        curr = next;
+    };
+    return curr;
+} ensure result >= 0
 
 fn main(args: arr String){
-    val msgWords = ["Hello", "world"];
-    val msg = joinWords(msgWords, '!');
-    print(msg)   // displays "Hello world!"
+    print(intToString(fib(10)))
 }
 
 ```
