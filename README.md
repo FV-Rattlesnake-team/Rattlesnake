@@ -29,6 +29,10 @@ fn main(args: arr String){
 
 [Variables renaming documentation](Renaming.md)
 
+## Dependencies
+
+Before verifying programs, make sure that z3 is installed and callable from the compiler. We tested it using z3 4.11.2.
+
 ## Command-line program
 
 Run `help` to see the available commands and options
