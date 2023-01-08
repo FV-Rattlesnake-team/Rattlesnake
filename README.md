@@ -228,7 +228,9 @@ ensure result <= b
 
 - In some cases, the verification of formulas relies on the correctness of other formulas that occur before them in the program. As a result, it can happen that an invalid formula is successfully verified if a formula asserted before it is invalid;
 
-- When a formula is found to be invalid, the verifier tries to output an assignment of variables that makes the formula false. This messages are meant to help the user figure out why verification fails, but they can be difficult to read, especially when (mutable) variables are involved. The best way to use them is to look for the values that are impossible. E.g. if the variables assignment contains `x == -1` but it is obvious from the program that x is never negative, this probably means that `x >= 0` should be added as an invariant or precondition or postcondition.
+- When a formula is found to be invalid, the verifier tries to output an assignment of variables that makes the formula false. This messages are meant to help the user figure out why verification fails, but they can be difficult to read, especially when (mutable) variables are involved. The best way to use them is to look for the values that are impossible. E.g. if the variables assignment contains `x == -1` but it is obvious from the program that x is never negative, this probably means that `x >= 0` should be added as an invariant or precondition or postcondition;
+
+- Some example programs can be found in the [examples](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/examples) folder. More examples (including some where verification finds bugs) can be found in the [test/res/verif](https://github.com/FV-Rattlesnake-team/Rattlesnake/tree/main/src/test/res/verif) folder.
 
 ## Built-in functions
 
