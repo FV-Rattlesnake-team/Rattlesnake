@@ -74,6 +74,12 @@ final class VarsCtx {
     }
   }
   
+  def copied: VarsCtx = {
+    val newVarsCtx = new VarsCtx()
+    newVarsCtx.variables.addAll(variables)
+    newVarsCtx
+  }
+  
   private def makeName(rawName: String, idx: Int): String = {
     if idx == 0 then rawName
     else rawName ++ "%" ++ idx.toString

@@ -255,7 +255,7 @@ final class Backend[V <: ClassVisitor](
            */
           val trueLabel = new Label()
           val endLabel = new Label()
-          val opcode = if tpe.isInstanceOf[StructType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
+          val opcode = if tpe.isInstanceOf[StructType] || tpe.isInstanceOf[ArrayType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
           mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
@@ -332,7 +332,7 @@ final class Backend[V <: ClassVisitor](
             val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
             mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName, fieldName, descriptorForType(rhs.getType))
 
-          case _ => shouldNotHappen()
+          case _ => throw new AssertionError(s"unexpected $lhs as LHS of var assignment")
         }
 
       case IfThenElse(cond, thenBr, elseBrOpt) =>
