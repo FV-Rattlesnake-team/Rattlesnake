@@ -1,3 +1,0 @@
-
-TODO support for constants
-TODO more tests (especially on `TypeChecker`)

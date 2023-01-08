@@ -78,7 +78,6 @@ class VerifierTests {
   @Test def arrPosFailTest6(): Unit = runVerifTest("arrPosFail6", false)
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
-    // TODO fail test if timeout occurs
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())
     val path = s"$resDirPath/$filename.${FileExtensions.rattlesnake}"
     val actualRes = pipeline.apply(List(SourceFile(path))).allPassed
