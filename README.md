@@ -26,7 +26,7 @@ fn main(args: arr String){
 
 [Instructions for running the verifier](#notes-on-using-the-verifier)
 
-[Compiler documentation](CompilerDoc.md)
+[Report](https://github.com/FV-Rattlesnake-team/Rattlesnake/blob/main/Report.pdf)
 
 [Variables renaming documentation](Renaming.md)
 
