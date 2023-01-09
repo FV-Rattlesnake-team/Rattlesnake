@@ -28,7 +28,7 @@ fn main(args: arr String){
 
 [Report](https://github.com/FV-Rattlesnake-team/Rattlesnake/blob/main/Report.pdf)
 
-[Variables renaming documentation](Renaming.md)
+[Slides](https://github.com/FV-Rattlesnake-team/Rattlesnake/blob/main/Slides.pdf)
 
 ## Command-line program
 
@@ -218,14 +218,14 @@ fn main(args: arr String) unchecked -> Void
 
 - The verifier does not check termination. Precisely, it checks partial correctness: if the function terminates, then it must satisfy its specification. In some cases, obviously wrong functions might therefore be successfully verified because they don't terminate, e.g.:
 
-```
-fn min(a: Int, b: Int) -> Int {
-    return min(a, b)
-}
-ensure (result == a || result == b)
-ensure result <= a
-ensure result <= b
-```
+    ```
+    fn min(a: Int, b: Int) -> Int {
+        return min(a, b)
+    }
+    ensure (result == a || result == b)
+    ensure result <= a
+    ensure result <= b
+    ```
 
 - In some cases, the verification of formulas relies on the correctness of other formulas that occur before them in the program. As a result, it can happen that an invalid formula is successfully verified if a formula asserted before it is invalid;
 
