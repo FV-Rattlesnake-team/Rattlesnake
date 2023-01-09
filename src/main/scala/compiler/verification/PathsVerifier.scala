@@ -215,14 +215,14 @@ final class PathsVerifier(
     additFormulasBuffer: ListBuffer[Term]
   ): Term = {
 
-    def wildcardVarOrUniqueRef(varTpe: Type): Term = {
-      varTpe match
-        case _: (StructType | ArrayType) =>
-          FunctionApplication(qid(refTypePlaceholderTypeName), List(Ints.NumeralLit(nextUniqueRef())))
-        case _ =>
-          val newVarName = nextNameForNewVar()
-          additVarsBuffer.addOne(newVarName -> varTpe)
-          qid(newVarName)
+    def wildcardVar(varTpe: Type): Term = {
+        val newVarName = nextNameForNewVar()
+        additVarsBuffer.addOne(newVarName -> varTpe)
+        qid(newVarName)
+    }
+
+    def uniqueRef(): FunctionApplication = {
+      FunctionApplication(qid(refTypePlaceholderTypeName), List(Ints.NumeralLit(nextUniqueRef())))
     }
 
     if (expr.getType.subtypeOf(NothingType)) {
@@ -244,15 +244,15 @@ final class PathsVerifier(
         case VariableRef(name) =>
           qid(name)
         case call: Call =>
-          wildcardVarOrUniqueRef(call.getType)  // variable with no constraint, since there is no postcondition
+          wildcardVar(call.getType)  // variable with no constraint, since there is no postcondition
         case indexing@Indexing(_, _) =>
-          wildcardVarOrUniqueRef(indexing.getType)
-        case arrInit@ArrayInit(_, _) =>
-          wildcardVarOrUniqueRef(arrInit.getType)
-        case arrInit@FilledArrayInit(_) =>
-          wildcardVarOrUniqueRef(arrInit.getType)
-        case structInit@StructInit(_, _) =>
-          wildcardVarOrUniqueRef(structInit.getType)
+          wildcardVar(indexing.getType)
+        case ArrayInit(_, _) =>
+          uniqueRef()
+        case FilledArrayInit(_) =>
+          uniqueRef()
+        case StructInit(_, _) =>
+          uniqueRef()
         case UnaryOp(ExclamationMark, operand) =>
           Not(transformExpr(operand))
         case UnaryOp(Minus, operand) if operand.getType.subtypeOf(IntType) =>
@@ -266,6 +266,8 @@ final class PathsVerifier(
         case binOp@BinaryOp(lhs, operator, rhs) => {
           if (operator == Equality) {
             Equals(transformExpr(lhs), transformExpr(rhs))
+          } else if (operator == Inequality){
+            Not(Equals(transformExpr(lhs), transformExpr(rhs)))
           } else if (lhs.getType.subtypeOf(BoolType)) {
             val transformedLhs = transformExpr(lhs)
             val transformedRhs = transformExpr(rhs)
@@ -316,7 +318,7 @@ final class PathsVerifier(
       case StringType =>
         reportUnsupported(tpe.toString, None)
       case StructType(_) =>
-        reportUnsupported(tpe.toString, None)
+        Sort(Identifier(SSymbol(refTypePlaceholderTypeName)))
       case ArrayType(_) =>
         Sort(Identifier(SSymbol(refTypePlaceholderTypeName)))
       case VoidType =>

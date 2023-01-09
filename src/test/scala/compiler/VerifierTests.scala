@@ -76,6 +76,13 @@ class VerifierTests {
   @Test def arrPosFailTest4(): Unit = runVerifTest("arrPosFail4", false)
   @Test def arrPosFailTest5(): Unit = runVerifTest("arrPosFail5", false)
   @Test def arrPosFailTest6(): Unit = runVerifTest("arrPosFail6", false)
+  @Test def refEqTest(): Unit = runVerifTest("refeq", true)
+  @Test def refEqFail1Test(): Unit = runVerifTest("refeqFail1", false)
+  @Test def refEqFail2Test(): Unit = runVerifTest("refeqFail2", false)
+  @Test def aliasingFail1Test(): Unit = runVerifTest("aliasingFail1", false)
+  @Test def aliasingFail2Test(): Unit = runVerifTest("aliasingFail2", false)
+  @Test def arrayAccessFail(): Unit = runVerifTest("arraccessFail", false)
+
 
   private def runVerifTest(filename: String, expectedRes: Boolean, timeoutSec: Int = 2): Unit = {
     val pipeline = TasksPipelines.verifier(Paths.get(outputDirPath), timeoutSec, logger = _ => ())
